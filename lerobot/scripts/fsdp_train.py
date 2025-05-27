@@ -286,6 +286,16 @@ def train(cfg: TrainPipelineConfig):
         buffer_dtype=torch.bfloat16,
         keep_low_precision_grads=True
     )
+    
+    # mixed_precision = MixedPrecision(
+    #     param_dtype=torch.float16,
+    #     # reduce_dtype=torch.float32,
+    #     reduce_dtype=torch.float16,
+    #     buffer_dtype=torch.float16,
+    #     keep_low_precision_grads=True,
+    #     cast_forward_inputs=True
+    # )
+    
     # mixed_precision = None
     
     model = FSDP(
@@ -321,8 +331,8 @@ def train(cfg: TrainPipelineConfig):
     )
     
     # 混合精度scaler
-    # scaler = ShardedGradScaler()
     scaler = None
+    # scaler = ShardedGradScaler()
     
     # Metrics setup
     train_metrics = {
