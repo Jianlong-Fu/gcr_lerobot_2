@@ -352,7 +352,7 @@ def train(cfg: TrainPipelineConfig):
         dataset.num_frames,
         dataset.num_episodes,
         train_metrics,
-        initial_step=int(step/cfg.gradient_accumulation_steps)
+        initial_step=int(step/4)
     )
     
     # 主训练循环
