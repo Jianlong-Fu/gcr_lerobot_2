@@ -154,24 +154,24 @@ def train_step(model, batch, scaler, cfg):
 @parser.wrap()
 def train(cfg: TrainPipelineConfig):
     # 初始化分布式环境
-    world_size = int(os.environ["WORLD_SIZE"])
-    local_rank = int(os.environ["LOCAL_RANK"])
-    world_rank = int(os.environ["RANK"])
-    node_rank = int(os.environ["NODE_RANK"])
-    master_ip = os.environ["MASTER_ADDR"]
-    master_port = os.environ["MASTER_PORT"]
-    master_uri = "tcp://%s:%s" % (master_ip, master_port)
-    dist.init_process_group(
-        backend="nccl",
-        init_method=master_uri,
-        world_size=world_size,
-        timeout=timedelta(minutes=60),
-        rank=world_rank,
-    )
-    # dist.init_process_group(backend="nccl")
-    # world_size = dist.get_world_size()
+    # world_size = int(os.environ["WORLD_SIZE"])
+    # local_rank = int(os.environ["LOCAL_RANK"])
+    # world_rank = int(os.environ["RANK"])
+    # node_rank = int(os.environ["NODE_RANK"])
+    # master_ip = os.environ["MASTER_ADDR"]
+    # master_port = os.environ["MASTER_PORT"]
+    # master_uri = "tcp://%s:%s" % (master_ip, master_port)
+    # dist.init_process_group(
+    #     backend="nccl",
+    #     init_method=master_uri,
+    #     world_size=world_size,
+    #     timeout=timedelta(minutes=60),
+    #     rank=world_rank,
+    # )
+    dist.init_process_group(backend="nccl")
+    world_size = dist.get_world_size()
     rank = dist.get_rank()
-    # local_rank = rank
+    local_rank = rank
     # local_rank = int(os.environ["OMPI_COMM_WORLD_LOCAL_RANK"])
     # local_rank = node_rank
     torch.cuda.set_device(local_rank)
@@ -179,7 +179,7 @@ def train(cfg: TrainPipelineConfig):
     # 初始化配置
     cfg.validate()
     logger = init_logger(cfg, rank)
-    logger.info(f"DIST INFO: world_size={world_size}, local_rank={local_rank}, world_rank={world_rank}, node_rank={node_rank}, master_uri={master_uri}")
+    # logger.info(f"DIST INFO: world_size={world_size}, local_rank={local_rank}, world_rank={world_rank}, node_rank={node_rank}, master_uri={master_uri}")
     
     if int(os.environ.get('RANK', 0)) == 0:
         logger.info(pformat(cfg.to_dict()))
@@ -215,8 +215,8 @@ def train(cfg: TrainPipelineConfig):
         image_transforms=image_transforms,
         seed=seed,
         data_mix=cfg.data_mix,
-        vla2root_json="vla2root.json",
-        # vla2root_json="vla2root_bak_single.json"
+        # vla2root_json="vla2root.json",
+        vla2root_json="vla2root_bak_single.json"
     )
     
     # Policy setup
@@ -248,11 +248,16 @@ def train(cfg: TrainPipelineConfig):
             cfg.resume = os.path.join(cfg.output_dir, f"step{step-1}.pt")
             logger.info(f"Resuming from checkpoint {cfg.resume} at step {step}")
             model_state_dict = torch.load(cfg.resume, map_location="cpu")
-            filterd_model_state_dict = {
-                k: v for k, v in model_state_dict.items() if "awa_model.lm_head" not in k and "qwen_expert.lm_head" not in k
-            }
+            key_to_remove = []
+            for k, v in model_state_dict.items():
+                if "awa_model.lm_head" in k or "qwen_expert.lm_head" in k:
+                    key_to_remove.append(k)
+            for k in key_to_remove:
+                del model_state_dict[k]
+            
+            policy.load_state_dict(model_state_dict, strict=True)
             del model_state_dict
-            policy.load_state_dict(filterd_model_state_dict, strict=True)
+            del key_to_remove
         else:
             cfg.resume = False
             logger.info("No checkpoint found, starting from scratch.")
