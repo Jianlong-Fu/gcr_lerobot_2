@@ -248,7 +248,11 @@ def train(cfg: TrainPipelineConfig):
             cfg.resume = os.path.join(cfg.output_dir, f"step{step-1}.pt")
             logger.info(f"Resuming from checkpoint {cfg.resume} at step {step}")
             model_state_dict = torch.load(cfg.resume, map_location="cpu")
-            policy.load_state_dict(model_state_dict, strict=True)
+            filterd_model_state_dict = {
+                k: v for k, v in model_state_dict.items() if "awa_model.lm_head" not in k and "qwen_expert.lm_head" not in k
+            }
+            del model_state_dict
+            policy.load_state_dict(filterd_model_state_dict, strict=True)
         else:
             cfg.resume = False
             logger.info("No checkpoint found, starting from scratch.")
@@ -348,7 +352,7 @@ def train(cfg: TrainPipelineConfig):
         dataset.num_frames,
         dataset.num_episodes,
         train_metrics,
-        initial_step=int(step)
+        initial_step=int(step/cfg.gradient_accumulation_steps)
     )
     
     # 主训练循环
@@ -366,7 +370,8 @@ def train(cfg: TrainPipelineConfig):
     
     if cfg.resume:
         logger.info("Setting up learning rate scheduler...")
-        for _ in range(int((step-1)/cfg.gradient_accumulation_steps)):
+        # for _ in range(int((step-1)/cfg.gradient_accumulation_steps)):
+        for _ in range(int((step-1)/4)):
             lr_scheduler.step()
     
     if rank == 0:

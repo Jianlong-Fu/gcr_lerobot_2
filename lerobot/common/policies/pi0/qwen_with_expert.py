@@ -539,6 +539,8 @@ class PaliGemmaWithExpertModel(PreTrainedModel):
         # self.query_compress = nn.ModuleList([QueryCompression(in_dim=6, out_dim=4, hiddem_dim=128) for _ in range(self.num_layers)])
         # self.kv_compress = KVCompress(in_dim=4, out_dim=2)
         self.awa_model = Qwen2ForCausalLM(config=config.awa_model_config)
+        del self.awa_model.lm_head
+        del self.qwen_expert.lm_head
         
         # Remove unused embed_tokens
         self.qwen_expert.model.embed_tokens = None
