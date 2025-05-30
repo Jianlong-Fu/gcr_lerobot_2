@@ -41,7 +41,7 @@ class TrainPipelineConfig(HubMixin):
     # automatic gradient scaling is used.
     use_amp: bool = False
     mixed_precision: str | None = None
-    gradient_accumulation_steps: int = 2
+    gradient_accumulation_steps: int = 4
     # `seed` is used for training (eg: model initialization, dataset shuffling)
     # AND for the evaluation environments.
     seed: int | None = 1000

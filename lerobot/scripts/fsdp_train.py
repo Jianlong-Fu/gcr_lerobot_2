@@ -169,9 +169,11 @@ def train(cfg: TrainPipelineConfig):
         timeout=timedelta(minutes=60),
         rank=world_rank,
     )
+    
     # dist.init_process_group(backend="nccl")
     # world_size = dist.get_world_size()
     # local_rank = rank
+    
     torch.cuda.set_device(local_rank)
     
     # 初始化配置
