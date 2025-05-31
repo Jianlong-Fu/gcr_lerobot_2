@@ -72,8 +72,8 @@ class WandBLogger:
         if cfg.resume:
             if self.cfg.id is not None:
                 wandb_run_id = self.cfg.id
-            else:
-                wandb_run_id = get_wandb_run_id_from_filesystem(self.log_dir)
+            # else:
+            #     wandb_run_id = get_wandb_run_id_from_filesystem(self.log_dir)
         else:
             wandb_run_id = None
         # wandb_run_id = get_wandb_run_id_from_filesystem(self.log_dir) if cfg.resume else None
