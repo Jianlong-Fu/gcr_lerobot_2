@@ -718,7 +718,7 @@ class PaliGemmaWithExpertModel(PreTrainedModel):
                 
         num_layers = self.num_layers
         for layer_idx in range(num_layers):
-            if layer_idx % 1 == 0:
+            if layer_idx % 14 == 0:
                 hidden_states = checkpoint(
                     self.cross_layer_forward,
                     models,
