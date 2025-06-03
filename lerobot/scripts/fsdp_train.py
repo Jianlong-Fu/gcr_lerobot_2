@@ -350,11 +350,14 @@ def train(cfg: TrainPipelineConfig):
     
     # mixed_precision = None
     
+    sharding_strategy = ShardingStrategy.HYBRID_SHARD
+    sharding_strategy = ShardingStrategy.FULL_SHARD
+    
     model = FSDP(
         policy,
         auto_wrap_policy=auto_wrap_policy,
         mixed_precision=mixed_precision,
-        sharding_strategy=ShardingStrategy.HYBRID_SHARD,
+        sharding_strategy=sharding_strategy,
         device_id=local_rank,
         use_orig_params=True
     )
