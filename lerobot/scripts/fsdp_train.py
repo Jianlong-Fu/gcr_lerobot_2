@@ -25,6 +25,7 @@ from pprint import pformat
 from termcolor import colored
 from typing import Any
 from datetime import timedelta
+from contextlib import nullcontext
 
 import torch
 import torch.distributed as dist
@@ -124,30 +125,67 @@ def save_fsdp_checkpoint(model, optim, output_dir, step):
         torch.save(model_state_dict, ckpt_path)
 
         logging.info(f"Checkpoint saved at {ckpt_path}")
+        
+def clip_grad_norm_low_mem(parameters, max_norm):
+    """低内存版本的梯度裁剪"""
+    grads = []
+    for p in parameters:
+        if p.grad is not None:
+            # 分离梯度并复制，避免保持计算图
+            grads.append(p.grad.detach().clone())
+    
+    # 逐个处理梯度，减少峰值内存
+    total_norm = 0.0
+    for grad in grads:
+        grad_norm = grad.norm(2)
+        total_norm += grad_norm.item() ** 2
+    total_norm = total_norm ** 0.5
+    
+    # 应用裁剪
+    clip_coef = max_norm / (total_norm + 1e-6)
+    if clip_coef < 1:
+        for grad in grads:
+            grad.mul_(clip_coef)
+    
+    # 将裁剪后的梯度复制回模型
+    idx = 0
+    for p in parameters:
+        if p.grad is not None:
+            p.grad.copy_(grads[idx])
+            idx += 1
+    
+    return torch.tensor(total_norm, device=grads[0].device)
 
-def train_step(model, batch, scaler, cfg):
+def train_step(model, batch, scaler, cfg, sync_flag):
     """执行单个训练步骤"""
     # 前向传播
     with torch.amp.autocast("cuda", dtype=torch.bfloat16, cache_enabled=False):
-        loss, output_dict = model(batch)
-    
-    loss = loss / cfg.gradient_accumulation_steps
-    
-    # 反向传播
-    if scaler is not None:
-        scaler.scale(loss).backward()
-    else:
-        loss.backward()
-    
-    # 梯度裁剪（可选）
-    # scaler.unscale_(optimizer)
-    grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-    # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-    
-    # 梯度平均，用于记录
-    if dist.is_initialized():
-        dist.all_reduce(grad_norm, op=dist.ReduceOp.SUM)
-        grad_norm /= dist.get_world_size()
+        
+        if sync_flag:
+            loss, output_dict = model(batch)
+            loss = loss / cfg.gradient_accumulation_steps
+            # 反向传播
+            if scaler is not None:
+                scaler.scale(loss).backward()
+            else:
+                loss.backward()
+            # 梯度裁剪（可选）
+            grad_norm = clip_grad_norm_low_mem(model.parameters(), max_norm=6.0)
+            # grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            # 梯度平均，用于记录
+            if dist.is_initialized():
+                dist.all_reduce(grad_norm, op=dist.ReduceOp.SUM)
+                grad_norm /= dist.get_world_size()
+        else:
+            with model.no_sync():
+                loss, output_dict = model(batch)
+                loss = loss / cfg.gradient_accumulation_steps
+                # 反向传播
+                if scaler is not None:
+                    scaler.scale(loss).backward()
+                else:
+                    loss.backward()
+            grad_norm = None
     
     return loss, grad_norm, output_dict
 
@@ -171,6 +209,7 @@ def train(cfg: TrainPipelineConfig):
     )
     
     # dist.init_process_group(backend="nccl")
+    # rank = dist.get_rank()
     # world_size = dist.get_world_size()
     # local_rank = rank
     
@@ -233,7 +272,8 @@ def train(cfg: TrainPipelineConfig):
     policy = make_policy(
         cfg=cfg.policy,
         device="cpu",
-        ds_meta=dataset.meta
+        ds_meta=dataset.meta,
+        weight_pt_path=cfg.policy.pretrained_path
     )
     
     # 统计模型参数量
@@ -322,8 +362,8 @@ def train(cfg: TrainPipelineConfig):
     # 优化器和学习率调度器
     optimizer, lr_scheduler = make_optimizer_and_scheduler(cfg, model)
     
-    if rank == 0:
-        logger.info(model)
+    # if rank == 0:
+    #     logger.info(model)
     
     # 数据加载器
     sampler = DistributedSampler(
@@ -388,7 +428,7 @@ def train(cfg: TrainPipelineConfig):
         
     
     while step < cfg.steps:
-        # logger.info(f"Step {step}/{cfg.steps}")
+        sync_flag = (step % cfg.gradient_accumulation_steps == 0)
         batch_start = time.perf_counter()
         batch = next(dataloader_iter)
         data_time = time.perf_counter() - batch_start
@@ -396,7 +436,8 @@ def train(cfg: TrainPipelineConfig):
         
         step_start = time.perf_counter()
         
-        loss, grad_norm, outputs = train_step(model, batch, scaler, cfg)
+        loss, grad_norm, outputs = train_step(model, batch, scaler, cfg, sync_flag)
+        del batch
         grad_to_record = grad_norm.item() if grad_norm is not None else 0.0
         grad_norm_value += grad_to_record
         loss_value += loss.detach().mean().item()
@@ -405,17 +446,17 @@ def train(cfg: TrainPipelineConfig):
         fwd_bwd_time += step_time
         
         # 参数更新
-        if step % cfg.gradient_accumulation_steps == 0:
+        if sync_flag:
+            logger.info(f"Step {step}/{cfg.steps}")
+            torch.cuda.empty_cache()
             optim_start = time.perf_counter()
             if scaler is not None:
                 scaler.step(optimizer)
                 scaler.update()
             else:
                 optimizer.step()
-            optimizer.zero_grad()
+            optimizer.zero_grad(set_to_none=True)
             optim_time = time.perf_counter() - optim_start
-            
-            # torch.cuda.empty_cache()
         
             # 更新指标
             train_tracker.optim_s = optim_time

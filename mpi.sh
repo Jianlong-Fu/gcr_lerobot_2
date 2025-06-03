@@ -13,7 +13,7 @@ torchrun --nnodes=1 \
     --policy.optimizer_lr=1e-3 \
     --policy.train_main_layers=0 \
     --policy.freeze_vision_encoder=false \
-    --policy.train_expert_only=false \
-    --resume=true
+    --policy.train_expert_only=false
+    # --resume=true
     
 

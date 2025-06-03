@@ -64,9 +64,13 @@ class QwenConfig(PreTrainedConfig):
 
     # Training presets
     optimizer_lr: float = 1e-4
-    optimizer_betas: tuple[float, float] = (0.9, 0.95)
-    optimizer_eps: float = 1e-8
+    # optimizer_beta2_decay: float = -0.8
+    # optimizer_eps: tuple[float | None, float] = (None, 0.001)
+    # optimizer_d: float = 1.0
     optimizer_weight_decay: float = 1e-10
+    
+    optimizer_eps: float = 1e-8
+    optimizer_betas: tuple[float, float] = (0.9, 0.95)
 
     scheduler_warmup_steps: int = 3_000
     scheduler_decay_steps: int = -1
@@ -108,6 +112,14 @@ class QwenConfig(PreTrainedConfig):
             self.input_features[key] = empty_camera
 
     def get_optimizer_preset(self) -> AdamWConfig:
+        
+        # return AdamWConfig(
+        #     lr=self.optimizer_lr,
+        #     beta2_decay=self.optimizer_beta2_decay,
+        #     eps=self.optimizer_eps,
+        #     weight_decay=self.optimizer_weight_decay,
+        #     d=self.optimizer_d,
+        # )
         return AdamWConfig(
             lr=self.optimizer_lr,
             betas=self.optimizer_betas,

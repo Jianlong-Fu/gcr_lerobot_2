@@ -10,6 +10,7 @@ OPTIMIZER_DECAY_LR=2.5e-6
 SCHEDULER_WARMUP_STEPS=2000
 SCHEDULER_DECAY_STEPS=50000
 SCHEDULER_PLATFORM_STEPS=1
+PRETRAINED_PATH=""
 
 # 解析命令行参数
 while [[ $# -gt 0 ]]; do
@@ -24,6 +25,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --node_rank)
             NODE_RANK="$2"
+            shift 2
+            ;;
+        --data_mix)
+            DATA_MIX="$2"
             shift 2
             ;;
         --master_addr)
@@ -58,6 +63,10 @@ while [[ $# -gt 0 ]]; do
             SCHEDULER_PLATFORM_STEPS="$2"
             shift 2
             ;;
+        --pre_path)
+            PRETRAINED_PATH="$2"
+            shift 2
+            ;;
         *)
             echo "未知参数: $1"
             exit 1
@@ -85,7 +94,7 @@ torchrun \
     --policy.type="qwen" \
     --output_dir="$FIXED_OUTPUT_DIR" \
     --dataset.repo_id="whatever" \
-    --batch_size=3 \
+    --batch_size=16 \
     --data_mix=$DATA_MIX \
     --dataset.processor="/mnt/wangxiaofa/qwen_params/Qwen2.5-VL-7B-Instruct/" \
     --dataset.parent_dir="/mnt/wangxiaofa/robot_dataset/lerobot-format/" \
@@ -97,6 +106,7 @@ torchrun \
     --policy.train_main_layers=0 \
     --policy.freeze_vision_encoder=false \
     --policy.train_expert_only=false \
+    --policy.pretrained_path=$PRETRAINED_PATH \
     --wandb.enable=true \
     --wandb.project="pi0first" \
     --job_name="$JOB_NAME" \
