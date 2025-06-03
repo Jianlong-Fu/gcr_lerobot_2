@@ -159,6 +159,7 @@ def clip_grad_norm_low_mem(parameters, max_norm):
 def train_step(model, batch, scaler, cfg, sync_flag):
     """执行单个训练步骤"""
     # 前向传播
+    sync_flag = True
     with torch.amp.autocast("cuda", dtype=torch.bfloat16, cache_enabled=False):
         
         if sync_flag:
@@ -351,7 +352,7 @@ def train(cfg: TrainPipelineConfig):
     # mixed_precision = None
     
     sharding_strategy = ShardingStrategy.HYBRID_SHARD
-    sharding_strategy = ShardingStrategy.FULL_SHARD
+    # sharding_strategy = ShardingStrategy.FULL_SHARD
     
     model = FSDP(
         policy,
