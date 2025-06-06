@@ -21,6 +21,8 @@ class QwenConfig(PreTrainedConfig):
     n_action_steps: int = 50
     
     max_frame: int = 3
+    
+    topk: int = 8
 
     normalization_mapping: dict[str, NormalizationMode] = field(
         default_factory=lambda: {

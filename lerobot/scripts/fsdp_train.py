@@ -451,7 +451,7 @@ def train(cfg: TrainPipelineConfig):
         
         # 参数更新
         if sync_flag:
-            logger.info(f"Step {step}/{cfg.steps}")
+            # logger.info(f"Step {step}/{cfg.steps}")
             torch.cuda.empty_cache()
             optim_start = time.perf_counter()
             if scaler is not None:
