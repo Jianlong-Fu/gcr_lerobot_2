@@ -239,6 +239,7 @@ def train(cfg: TrainPipelineConfig):
     
     step = 1
     seed = cfg.seed + rank
+    seed = cfg.seed
     if cfg.resume:
         logger.info("Resume is set, will model from checkpoint...")
         os.makedirs(cfg.output_dir, exist_ok=True)
@@ -247,7 +248,7 @@ def train(cfg: TrainPipelineConfig):
         if pts:
             steps = [int(os.path.basename(pt).split(".")[0].split("step")[1]) for pt in pts]
             step = sorted(steps)[-1] + 1
-            seed += (step-1)
+            # seed += (step-1)
             
     image_transforms = (ImageTransforms(cfg.dataset.image_transforms))
     dataset = MultiDatasetforDistTraining(
@@ -375,7 +376,7 @@ def train(cfg: TrainPipelineConfig):
         num_replicas=world_size,
         rank=rank,
         shuffle=True,
-        seed=cfg.seed+rank,
+        seed=seed,
     )
     
     dataloader = DataLoader(
