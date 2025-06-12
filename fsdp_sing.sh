@@ -9,6 +9,7 @@ OPTIMIZER_LR=2.5e-5
 OPTIMIZER_DECAY_LR=2.5e-6
 SCHEDULER_WARMUP_STEPS=1000
 SCHEDULER_DECAY_STEPS=30000
+SAVE_FREQ=2000
 SCHEDULER_PLATFORM_STEPS=1
 PRETRAINED_PATH=""
 GRADIENT_ACCUMULATION_STEPS=4
@@ -42,6 +43,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --job_name)
             JOB_NAME="$2"
+            shift 2
+            ;;
+        --save_freq)
+            SAVE_FREQ="$2"
             shift 2
             ;;
         --optimizer_lr)
@@ -100,6 +105,7 @@ torchrun \
     --output_dir="$FIXED_OUTPUT_DIR" \
     --dataset.repo_id="whatever" \
     --batch_size=10 \
+    --save_freq=$SAVE_FREQ \
     --gradient_accumulation_steps=$GRADIENT_ACCUMULATION_STEPS \
     --data_mix=$DATA_MIX \
     --dataset.processor="/mnt/wangxiaofa/qwen_params/Qwen2.5-VL-7B-Instruct/" \
