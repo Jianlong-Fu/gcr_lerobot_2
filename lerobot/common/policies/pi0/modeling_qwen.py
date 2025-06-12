@@ -316,6 +316,32 @@ class QwenPolicy(PreTrainedPolicy):
             # effectively has shape (n_action_steps, batch_size, *), hence the transpose.
             self._action_queue.extend(actions.transpose(0, 1))
         return self._action_queue.popleft()
+    
+    @torch.no_grad()
+    def infer(self, batch):
+        input_ids = batch["input_ids"]
+        attention_mask = batch["attention_mask"]
+        pixel_values = batch["pixel_values"]
+        image_grid_thw = batch["image_grid_thw"]
+        pixel_values_videos = batch["pixel_values_videos"]
+        video_grid_thw = batch["video_grid_thw"]
+        second_per_grid_ts = batch["second_per_grid_ts"]
+        
+        print(f"attention_mask: {attention_mask.shape}")
+        
+        mean = batch["action.mean"]
+        std = batch["action.std"]
+        
+        state = self.prepare_state(batch)
+        state = self.convert_to_dtype(state)
+        
+        actions = self.model.sample_actions(input_ids, attention_mask, pixel_values, image_grid_thw, pixel_values_videos, video_grid_thw, second_per_grid_ts, state)
+        actions = actions.cpu()
+        
+        actions = actions*(std + 1e-8) + mean
+        
+        actions = actions.numpy()
+        return actions
 
     def forward(self, batch: dict[str, Tensor], noise=None, time=None) -> tuple[Tensor, dict[str, Tensor]]:
         """Do a full training forward pass to compute the loss"""
@@ -861,6 +887,7 @@ class QwenFlowMatching(nn.Module):
         state_embs, suffix_embs, suffix_pad_masks, suffix_att_masks = self.embed_suffix(state, x_t, time)
 
         # pad_masks = torch.cat([prefix_pad_masks, suffix_pad_masks], dim=1)
+        # print(f"prefix_att_masks: {prefix_att_masks.shape}, suffix_att_masks: {suffix_att_masks.shape}")
         att_masks = torch.cat([prefix_att_masks, suffix_att_masks], dim=1)
         # print(f"init att masks: {att_masks.shape}")
 
@@ -886,8 +913,10 @@ class QwenFlowMatching(nn.Module):
 
         losses = F.mse_loss(u_t, v_t, reduction="none")
         return losses
-
-    def sample_actions(self, images, img_masks, lang_tokens, lang_masks, state, noise=None) -> Tensor:
+    
+    def sample_actions(
+        self, input_ids, attention_mask, pixel_values, image_grid_thw, pixel_values_videos, video_grid_thw, second_per_grid_ts, state, noise=None, dtype=None
+        ) -> Tensor:
         """Do a full inference forward and compute the action (batch_size x num_steps x num_motors)"""
         bsize = state.shape[0]
         device = state.device
@@ -896,32 +925,27 @@ class QwenFlowMatching(nn.Module):
             actions_shape = (bsize, self.config.n_action_steps, self.config.max_action_dim)
             noise = self.sample_noise(actions_shape, device)
 
-        prefix_embs, prefix_pad_masks, prefix_att_masks = self.embed_prefix(
-            images, img_masks, lang_tokens, lang_masks
+        prefix_embs, prefix_att_masks, prefix_pos_ids = self.embed_prefix(
+            input_ids, attention_mask, pixel_values, image_grid_thw, pixel_values_videos, video_grid_thw, second_per_grid_ts
         )
-        prefix_att_2d_masks = make_att_2d_masks(prefix_pad_masks, prefix_att_masks)
-        prefix_position_ids = torch.cumsum(prefix_pad_masks, dim=1) - 1
-
-        # Compute image and language key value cache
-        _, past_key_values = self.paligemma_with_expert.forward(
-            attention_mask=prefix_att_2d_masks,
-            position_ids=prefix_position_ids,
-            past_key_values=None,
-            inputs_embeds=[prefix_embs, None],
-            use_cache=self.config.use_cache,
-            fill_kv_cache=True,
-        )
-
+        
+        # print(f"prefix_att_masks: {prefix_att_masks.shape}")
+        
+        past_key_values = None
+        
         dt = -1.0 / self.config.num_steps
-        dt = torch.tensor(dt, dtype=torch.float32, device=device)
+        dt = torch.tensor(dt, dtype=dtype, device=device)
 
         x_t = noise
-        time = torch.tensor(1.0, dtype=torch.float32, device=device)
+        time = torch.tensor(1.0, dtype=dtype, device=device)
+        
         while time >= -dt / 2:
             expanded_time = time.expand(bsize)
             v_t = self.denoise_step(
                 state,
-                prefix_pad_masks,
+                prefix_att_masks,
+                prefix_embs,
+                prefix_pos_ids,
                 past_key_values,
                 x_t,
                 expanded_time,
@@ -930,41 +954,118 @@ class QwenFlowMatching(nn.Module):
             # Euler step
             x_t += dt * v_t
             time += dt
-        return x_t
+        return x_t.to(dtype=torch.float32)
 
     def denoise_step(
         self,
         state,
-        prefix_pad_masks,
+        prefix_att_masks,
+        prefix_embs,
+        prefix_pos_ids,
         past_key_values,
         x_t,
         timestep,
     ):
         """Apply one denoising step of the noise `x_t` at a given timestep."""
-        suffix_embs, suffix_pad_masks, suffix_att_masks = self.embed_suffix(state, x_t, timestep)
+        state_embs, suffix_embs, suffix_pad_masks, suffix_att_masks = self.embed_suffix(state, x_t, timestep)
+        
+        # print(f"prefix_att_masks: {prefix_att_masks.shape}, suffix_att_masks: {suffix_att_masks.shape}")
+        att_masks = torch.cat([prefix_att_masks, suffix_att_masks], dim=1)
 
-        suffix_len = suffix_pad_masks.shape[1]
-        batch_size = prefix_pad_masks.shape[0]
-        prefix_len = prefix_pad_masks.shape[1]
-        prefix_pad_2d_masks = prefix_pad_masks[:, None, :].expand(batch_size, suffix_len, prefix_len)
-
-        suffix_att_2d_masks = make_att_2d_masks(suffix_pad_masks, suffix_att_masks)
-
-        full_att_2d_masks = torch.cat([prefix_pad_2d_masks, suffix_att_2d_masks], dim=2)
-
-        prefix_offsets = torch.sum(prefix_pad_masks, dim=-1)[:, None]
-        position_ids = prefix_offsets + torch.cumsum(suffix_pad_masks, dim=1) - 1
-
-        outputs_embeds, _ = self.paligemma_with_expert.forward(
-            attention_mask=full_att_2d_masks,
-            position_ids=position_ids,
+        (_, __, suffix_out), ___ = self.paligemma_with_expert.forward(
+            attention_mask=att_masks,
+            position_ids=prefix_pos_ids,
             past_key_values=past_key_values,
-            inputs_embeds=[None, suffix_embs],
-            use_cache=self.config.use_cache,
+            inputs_embeds=[prefix_embs, state_embs, suffix_embs],
+            use_cache=True,
             fill_kv_cache=False,
         )
-        suffix_out = outputs_embeds[1]
         suffix_out = suffix_out[:, -self.config.n_action_steps :]
-        suffix_out = suffix_out.to(dtype=torch.float32)
+        # print(suffix_out.shape) # 1 51 1536
+        # suffix_out = suffix_out[:, -self.config.n_action_steps :]
+        # suffix_out = suffix_out.to(dtype=torch.float32)
         v_t = self.action_out_proj(suffix_out)
+        # v_t = v_t.to(dtype=torch.float32)
         return v_t
+
+    # def sample_actions(self, images, img_masks, lang_tokens, lang_masks, state, noise=None) -> Tensor:
+    #     """Do a full inference forward and compute the action (batch_size x num_steps x num_motors)"""
+    #     bsize = state.shape[0]
+    #     device = state.device
+
+    #     if noise is None:
+    #         actions_shape = (bsize, self.config.n_action_steps, self.config.max_action_dim)
+    #         noise = self.sample_noise(actions_shape, device)
+
+    #     prefix_embs, prefix_pad_masks, prefix_att_masks = self.embed_prefix(
+    #         images, img_masks, lang_tokens, lang_masks
+    #     )
+    #     prefix_att_2d_masks = make_att_2d_masks(prefix_pad_masks, prefix_att_masks)
+    #     prefix_position_ids = torch.cumsum(prefix_pad_masks, dim=1) - 1
+
+    #     # Compute image and language key value cache
+    #     _, past_key_values = self.paligemma_with_expert.forward(
+    #         attention_mask=prefix_att_2d_masks,
+    #         position_ids=prefix_position_ids,
+    #         past_key_values=None,
+    #         inputs_embeds=[prefix_embs, None],
+    #         use_cache=self.config.use_cache,
+    #         fill_kv_cache=True,
+    #     )
+
+    #     dt = -1.0 / self.config.num_steps
+    #     dt = torch.tensor(dt, dtype=torch.float32, device=device)
+
+    #     x_t = noise
+    #     time = torch.tensor(1.0, dtype=torch.float32, device=device)
+    #     while time >= -dt / 2:
+    #         expanded_time = time.expand(bsize)
+    #         v_t = self.denoise_step(
+    #             state,
+    #             prefix_pad_masks,
+    #             past_key_values,
+    #             x_t,
+    #             expanded_time,
+    #         )
+
+    #         # Euler step
+    #         x_t += dt * v_t
+    #         time += dt
+    #     return x_t
+
+    # def denoise_step(
+    #     self,
+    #     state,
+    #     prefix_pad_masks,
+    #     past_key_values,
+    #     x_t,
+    #     timestep,
+    # ):
+    #     """Apply one denoising step of the noise `x_t` at a given timestep."""
+    #     suffix_embs, suffix_pad_masks, suffix_att_masks = self.embed_suffix(state, x_t, timestep)
+
+    #     suffix_len = suffix_pad_masks.shape[1]
+    #     batch_size = prefix_pad_masks.shape[0]
+    #     prefix_len = prefix_pad_masks.shape[1]
+    #     prefix_pad_2d_masks = prefix_pad_masks[:, None, :].expand(batch_size, suffix_len, prefix_len)
+
+    #     suffix_att_2d_masks = make_att_2d_masks(suffix_pad_masks, suffix_att_masks)
+
+    #     full_att_2d_masks = torch.cat([prefix_pad_2d_masks, suffix_att_2d_masks], dim=2)
+
+    #     prefix_offsets = torch.sum(prefix_pad_masks, dim=-1)[:, None]
+    #     position_ids = prefix_offsets + torch.cumsum(suffix_pad_masks, dim=1) - 1
+
+    #     outputs_embeds, _ = self.paligemma_with_expert.forward(
+    #         attention_mask=full_att_2d_masks,
+    #         position_ids=position_ids,
+    #         past_key_values=past_key_values,
+    #         inputs_embeds=[None, suffix_embs],
+    #         use_cache=self.config.use_cache,
+    #         fill_kv_cache=False,
+    #     )
+    #     suffix_out = outputs_embeds[1]
+    #     suffix_out = suffix_out[:, -self.config.n_action_steps :]
+    #     suffix_out = suffix_out.to(dtype=torch.float32)
+    #     v_t = self.action_out_proj(suffix_out)
+    #     return v_t
