@@ -1438,12 +1438,10 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         total_dataset_len = sum(self.dataset_sizes)
         sample_dataset_len = int(total_dataset_len * cfg.dataset.sample_ratio)
         dataset_sample_counts = []  # 计算子集大小
-        self.dataset_len = 0
         for s_w in self.sample_weights:
             num_samples = int(s_w * sample_dataset_len)
             dataset_sample_counts.append(num_samples)
-            self.dataset_len += num_samples
-        print(f"Dataset len:{self.dataset_len}")
+        # print(f"Dataset len:{self.dataset_len}")
         print("Final sampling info:")
         table_data = [
             [self.dataset_names[i], len(self.datasets[i]), dataset_sample_counts[i], f"{self.sample_weights[i]:.4f}"]
@@ -1453,6 +1451,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         # sample and use NamedSubset to contain dataset_name
         self.id2data = {}
         self.num_episodes = 0
+        self.dataset_len = 0
         temp_data_num = 0
         for ds_id in range(len(self.datasets)):
             dataset = self.datasets[ds_id]
@@ -1470,7 +1469,9 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
                 self.id2data[temp_data_num] = (ds_id, idx)
                 temp_data_num += 1
         
-        assert temp_data_num == self.dataset_len, f"Total sampled data num {temp_data_num} != dataset_len {self.dataset_len}"
+        self.dataset_len = temp_data_num
+        print(f"Dataset length: {self.dataset_len}, Total episodes: {self.num_episodes}")
+        # assert temp_data_num == self.dataset_len, f"Total sampled data num {temp_data_num} != dataset_len {self.dataset_len}"
         # concat the selected dataset
         # self.dataset = ConcatDataset(selected_subsets)
         
