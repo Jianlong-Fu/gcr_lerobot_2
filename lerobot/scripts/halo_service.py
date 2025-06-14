@@ -84,9 +84,9 @@ def prepare_images(item: dict):
         image_pool[item["exp_id"]].append(item["primary"])
     else:
         image_pool[item["exp_id"]] = [item["primary"]]
-    vision["image"].append(item["primary"])
+    vision["image"].append(item["primary"][-1])
         
-    video = image_pool[item["exp_id"]][-3:]
+    video = item["primary"]
     video_length = len(video)
     for i in range(video_length):
         video[i] = video[i].resize((112, 112))
@@ -257,8 +257,12 @@ def predict():
     }
     
     images = resp['images']
-    image_k4a_1 = Image.fromarray(decode_b64_image(images))
-    item["primary"] = image_k4a_1
+    item["primary"] = []
+    for img in images:
+        image_k4a_1 = decode_b64_image(img)
+        image_k4a_1 = image_k4a_1[40:720,200:880,:] 
+        image_k4a_1 = Image.fromarray(image_k4a_1).resize((224,224))
+        item["primary"].append(image_k4a_1)
     
     input = prepare_input(item, processor)
     input["action.mean"] = action_mean
@@ -277,7 +281,7 @@ def predict():
 @parser.wrap()
 def start_service(cfg: TrainPipelineConfig):
     
-    path_2_load = "/data_16T/deepseek/halo/step65000.pt"
+    path_2_load = "/data_16T/deepseek/halo/step4000.pt"
     cfg.policy.qwen_path = "/datassd_1T/qwen25vl/Qwen2.5-VL-7B-Instruct/"
     
     image_transforms = (ImageTransforms(cfg.dataset.image_transforms))
@@ -314,7 +318,7 @@ def start_service(cfg: TrainPipelineConfig):
         for k in key_to_remove:
             del model_state_dict[k]
             
-        policy.load_state_dict(model_state_dict, strict=False)
+        policy.load_state_dict(model_state_dict, strict=True)
         del model_state_dict
         del key_to_remove
     

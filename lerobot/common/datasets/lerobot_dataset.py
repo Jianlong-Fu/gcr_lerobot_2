@@ -1642,6 +1642,20 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         if "agi" in item['dataset_name']:
             item["action"] = (item["action"] - self.stats["action"]["mean"]) / (self.stats["action"]["std"] + 1e-8)
             item["observation.state"] = (item["observation.state"] - self.stats["observation.state"]["mean"]) / (self.stats["observation.state"]["std"] + 1e-8)
+            
+        elif "pizza" in item['dataset_name']:
+            state_mean = torch.zeros(self.max_state_dim)
+            state_mean[:8] = self.stats["observation.state"]["mean"][:8]
+            state_std = torch.ones(self.max_state_dim)
+            state_std[:8] = self.stats["observation.state"]["std"][:8]
+            item["observation.state"] = (item["observation.state"] - state_mean) / (state_std + 1e-8)
+            
+            action_mean = torch.zeros(self.max_action_dim)
+            action_mean[:6] = self.stats["action"]["mean"][:6]
+            action_std = torch.ones(self.max_action_dim)
+            action_std[:6] = self.stats["action"]["std"][:6]
+            item["action"] = (item["action"] - action_mean) / (action_std + 1e-8)
+            
         else:
             state_mean = torch.zeros(self.max_state_dim)
             state_mean[:8] = self.stats["observation.state"]["mean"][:8]
