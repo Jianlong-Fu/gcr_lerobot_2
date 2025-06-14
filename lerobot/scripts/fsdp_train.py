@@ -386,7 +386,7 @@ def train(cfg: TrainPipelineConfig):
         dataset,
         batch_size=cfg.batch_size,
         sampler=sampler,
-        num_workers=2,
+        num_workers=3,
         collate_fn=extra_collate_fn,
         pin_memory=False,
     )
