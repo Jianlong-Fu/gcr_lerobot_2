@@ -24,6 +24,7 @@ from datetime import datetime
 from pprint import pformat
 from termcolor import colored
 from typing import Any
+from tqdm import tqdm
 from datetime import timedelta
 from contextlib import nullcontext
 
@@ -428,7 +429,7 @@ def train(cfg: TrainPipelineConfig):
         for _ in range(int((step-1)/cfg.gradient_accumulation_steps)):
             lr_scheduler.step()
         logger.info("Resuming Data Batch")
-        for _ in range(int(step)):
+        for _ in tqdm(range(int(step)), desc="Resuming Data Batch"):
             next(dataloader_iter)
     
     if rank == 0:
