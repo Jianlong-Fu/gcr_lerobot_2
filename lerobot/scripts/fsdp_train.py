@@ -406,7 +406,7 @@ def train(cfg: TrainPipelineConfig):
         dataset.num_frames,
         dataset.num_episodes,
         train_metrics,
-        initial_step=int(step/4)
+        initial_step=int(step/cfg.gradient_accumulation_steps)
     )
     
     # 主训练循环
@@ -425,8 +425,11 @@ def train(cfg: TrainPipelineConfig):
     if cfg.resume:
         logger.info("Setting up learning rate scheduler...")
         # for _ in range(int((step-1)/cfg.gradient_accumulation_steps)):
-        for _ in range(int((step-1)/4)):
+        for _ in range(int((step-1)/cfg.gradient_accumulation_steps)):
             lr_scheduler.step()
+        logger.info("Resuming Data Batch")
+        for _ in range(int(step)):
+            next(dataloader_iter)
     
     if rank == 0:
         logger.info("Starting training loop...")
