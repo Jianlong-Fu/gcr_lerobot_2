@@ -424,38 +424,51 @@ def train(cfg: TrainPipelineConfig):
     grad_norm_value = 0.0
     loss_value = 0.0
     
+    dataloader_iter = cycle(dataloader)
+    
     if cfg.resume:
         logger.info("Setting up learning rate scheduler...")
         # for _ in range(int((step-1)/cfg.gradient_accumulation_steps)):
         for _ in range(int((step-1)/cfg.gradient_accumulation_steps)):
             lr_scheduler.step()
         logger.info("Resuming Data Batch")
-        sampler.set_epoch(0)
-        all_indices = list(sampler)
-        samples_per_epoch = len(all_indices)
-        batches_per_epoch = math.ceil(samples_per_epoch / cfg.batch_size)
-        epoch_num = step // batches_per_epoch
-        batch_in_epoch = step % batches_per_epoch
-        sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank,
-                             shuffle=True, seed=seed)
-        sampler.set_epoch(epoch_num)
-        epoch_indices = list(sampler)
-        
-        start_idx = batch_in_epoch * cfg.batch_size
-        resume_indices = epoch_indices[start_idx : ]
-        
-        resume_dataset = Subset(dataset, resume_indices)
-        
-        dataloader = DataLoader(
-            resume_dataset,
-            batch_size=cfg.batch_size,
-            shuffle=False,         # 已经在 Subset 里做过 shuffle
-            num_workers=3,
-            collate_fn=extra_collate_fn,
-            pin_memory=False,
-        )
-        
-    dataloader_iter = cycle(dataloader)
+        if cfg.job_type == "pretrain":
+            sampler.set_epoch(0)
+            all_indices = list(sampler)
+            samples_per_epoch = len(all_indices)
+            batches_per_epoch = math.ceil(samples_per_epoch / cfg.batch_size)
+            epoch_num = step // batches_per_epoch
+            batch_in_epoch = step % batches_per_epoch
+            sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank,
+                                shuffle=True, seed=seed)
+            sampler.set_epoch(epoch_num)
+            epoch_indices = list(sampler)
+            
+            start_idx = batch_in_epoch * cfg.batch_size
+            resume_indices = epoch_indices[start_idx : ]
+            
+            resume_dataset = Subset(dataset, resume_indices)
+            
+            dataloader = DataLoader(
+                resume_dataset,
+                batch_size=cfg.batch_size,
+                shuffle=False,         # 已经在 Subset 里做过 shuffle
+                num_workers=3,
+                collate_fn=extra_collate_fn,
+                pin_memory=False,
+            )
+            dataloader_iter = cycle(dataloader)
+        else:
+            sampler.set_epoch(0)
+            all_indices = list(sampler)
+            samples_per_epoch = len(all_indices)
+            batches_per_epoch = math.ceil(samples_per_epoch / cfg.batch_size)
+            epoch_num = step // batches_per_epoch
+            batch_in_epoch = step % batches_per_epoch
+            
+            for _ in tqdm(range(batch_in_epoch),desc="Resuming Data Batch"):
+                next(dataloader_iter)
+            sampler.set_epoch(epoch_num)
     
     if rank == 0:
         logger.info("Starting training loop...")
