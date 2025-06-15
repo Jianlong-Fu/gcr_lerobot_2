@@ -4,6 +4,7 @@
 NNODES=1
 NPROC_PER_NODE=2
 JOB_NAME=""
+JOB_TYPE="pretrain"
 DATA_MIX="oxe_magic_soup_plus"
 OPTIMIZER_LR=2.5e-5
 OPTIMIZER_DECAY_LR=2.5e-6
@@ -43,6 +44,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --job_name)
             JOB_NAME="$2"
+            shift 2
+            ;;
+        --job_type)
+            JOB_TYPE="$2"
             shift 2
             ;;
         --save_freq)
@@ -122,5 +127,6 @@ torchrun \
     --wandb.enable=true \
     --wandb.project="pi0first" \
     --job_name="$JOB_NAME" \
+    --job_type="$JOB_TYPE" \
     --log_dir="/mnt/wangxiaofa/logs" \
     --resume=true
