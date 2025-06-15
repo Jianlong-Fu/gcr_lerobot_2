@@ -68,8 +68,8 @@ class TrainPipelineConfig(HubMixin):
         self.checkpoint_path = None
 
     def validate(self):
-        if not job_type:
-            job_type = "pretrain"
+        if not self.job_type:
+            self.job_type = "pretrain"
         if self.log_dir is None:
             self.log_dir = "logs"
         if not self.device:
