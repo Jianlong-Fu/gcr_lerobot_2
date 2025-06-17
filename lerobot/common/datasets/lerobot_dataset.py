@@ -1652,8 +1652,10 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             
             action_mean = torch.zeros(self.max_action_dim)
             action_mean[:14] = self.stats["action"]["mean"][:14]
+            action_mean[6] = 0.0
             action_std = torch.ones(self.max_action_dim)
             action_std[:14] = self.stats["action"]["std"][:14]
+            action_std[6] = 1.0
             item["action"] = (item["action"] - action_mean) / (action_std + 1e-8)
             
         else:
