@@ -14,6 +14,7 @@ SAVE_FREQ=2000
 SCHEDULER_PLATFORM_STEPS=1
 PRETRAINED_PATH=""
 GRADIENT_ACCUMULATION_STEPS=4
+FREEZE_VISION="true"
 TRAIN_FULL_VLM='true'
 TRAIN_AWA='true'
 TRAIN_EXPERT='true'
@@ -71,6 +72,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --awa)
             TRAIN_AWA="$2"
+            shift 2
+            ;;
+        --freeze_vision)
+            FREEZE_VISION="$2"
             shift 2
             ;;
         --scheduler_decay_lr)
@@ -135,7 +140,7 @@ torchrun \
     --policy.scheduler_platform_steps=$SCHEDULER_PLATFORM_STEPS \
     --policy.optimizer_lr=$OPTIMIZER_LR \
     --policy.scheduler_decay_lr=$OPTIMIZER_DECAY_LR \
-    --policy.freeze_vision_encoder=true \
+    --policy.freeze_vision_encoder=$FREEZE_VISION \
     --policy.train_expert_only=false \
     --policy.train_awa=$TRAIN_AWA \
     --policy.train_expert=$TRAIN_EXPERT \
