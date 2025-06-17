@@ -670,6 +670,9 @@ class QwenFlowMatching(nn.Module):
             train_expert_only=self.config.train_expert_only,
             attention_implementation=self.config.attention_implementation,
             train_main_layers=self.config.train_main_layers,
+            train_awa=self.config.train_awa,
+            train_expert=self.config.train_expert,
+            train_full_vlm=self.config.train_full_vlm,
             topk=self.config.topk,
         )
         self.paligemma_with_expert = PaliGemmaWithExpertModel(paligemma_with_export_config, init_load = init_load, init_path = init_path)

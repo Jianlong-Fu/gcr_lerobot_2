@@ -90,7 +90,8 @@ def prepare_images(item: dict):
     video_length = len(video)
     for i in range(video_length):
         video[i] = video[i].resize((112, 112))
-        
+    
+    # vision["image"].append(item["secondary"])
     default_image = Image.fromarray(np.ones((224, 224, 3), dtype=np.uint8))
     vision["image"].append(default_image)
     vision["image"].append(default_image)
@@ -256,13 +257,16 @@ def predict():
         "exp_id": resp["exp_id"]
     }
     
-    images = resp['images']
+    images = resp['images'][0]
     item["primary"] = []
     for img in images:
         image_k4a_1 = decode_b64_image(img)
         image_k4a_1 = image_k4a_1[40:720,200:880,:] 
         image_k4a_1 = Image.fromarray(image_k4a_1).resize((224,224))
         item["primary"].append(image_k4a_1)
+    item["secondary"] = decode_b64_image(resp['images'][1])
+    item["secondary"] = item["secondary"][40:720,200:880,:]
+    item["secondary"] = Image.fromarray(item["secondary"]).resize((224,224))
     
     input = prepare_input(item, processor)
     input["action.mean"] = action_mean
@@ -271,6 +275,7 @@ def predict():
     actions = halo.infer(input).tolist() # 1 * 50 *32
     # actions = actions[0] # 50 * 32
     actions = [row[:7] for row in actions[0]] # 50 * 7
+    print(actions[:5])
     
     response_dict = {
         "act": actions
@@ -281,7 +286,7 @@ def predict():
 @parser.wrap()
 def start_service(cfg: TrainPipelineConfig):
     
-    path_2_load = "/data_16T/deepseek/halo/step4000.pt"
+    path_2_load = "/data_16T/deepseek/halo/step28000.pt"
     cfg.policy.qwen_path = "/datassd_1T/qwen25vl/Qwen2.5-VL-7B-Instruct/"
     
     image_transforms = (ImageTransforms(cfg.dataset.image_transforms))
@@ -291,11 +296,14 @@ def start_service(cfg: TrainPipelineConfig):
         image_transforms=image_transforms,
         seed=seed,
         data_mix=cfg.data_mix,
-        vla2root_json="vla2root.json",
+        vla2root_json="pizza.json",
         # vla2root_json="vla2root_bak_single.json"
     )
     action_mean = dataset.stats["action"]["mean"]
     action_std = dataset.stats["action"]["std"]
+    print(action_mean, action_std)
+    # action_mean[6] = 0.0
+    # action_std[6] = 1.0
     
     state_mean = dataset.stats["observation.state"]["mean"]
     state_std = dataset.stats["observation.state"]["std"]

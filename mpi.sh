@@ -13,8 +13,11 @@ torchrun --nnodes=1 \
     --policy.scheduler_decay_steps=100000 \
     --policy.optimizer_lr=1e-3 \
     --policy.train_main_layers=0 \
-    --policy.freeze_vision_encoder=false \
-    --policy.train_expert_only=false
+    --policy.freeze_vision_encoder=true \
+    --policy.train_expert_only=false \
+    --policy.train_awa=true \
+    --policy.train_expert=true \
+    --policy.train_full_vlm=false
     # --resume=true
     
 

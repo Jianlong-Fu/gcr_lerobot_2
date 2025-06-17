@@ -182,6 +182,9 @@ class PaliGemmaWithExpertConfig(PretrainedConfig):
         gemma_expert_config: dict | None = None,
         freeze_vision_encoder: bool = True,
         train_expert_only: bool = True,
+        train_expert: bool = True,
+        train_awa: bool = True,
+        train_full_vlm: bool = True,
         attention_implementation: str = "eager",
         train_main_layers: int = 0,
         qwen25vl_config: dict | None = None,
@@ -193,6 +196,9 @@ class PaliGemmaWithExpertConfig(PretrainedConfig):
         self.train_main_layers = train_main_layers
         self.freeze_vision_encoder = freeze_vision_encoder
         self.train_expert_only = train_expert_only
+        self.train_expert = train_expert
+        self.train_awa = train_awa
+        self.train_full_vlm = train_full_vlm
         self.attention_implementation = attention_implementation
         self.topk = topk
         
@@ -615,24 +621,77 @@ class PaliGemmaWithExpertModel(PreTrainedModel):
         self.qwen25vl = Qwen2_5_VLForConditionalGeneration.from_pretrained(path)
 
     def set_requires_grad(self):
-        if self.config.train_expert_only:
-            print(f"Freezing qwen25vl, setting {self.config.train_main_layers} layers unfrozen")
-            if self.config.train_main_layers == 0:
-                self.qwen25vl.eval()
-                for params in self.qwen25vl.parameters():
-                    params.requires_grad = False
-            else:
+        
+        if self.config.train_expert:
+            print("Training action expert")
+            for params in self.qwen_expert.parameters():
+                params.requires_grad = True
+        else:
+            print("Freezing action expert")
+            self.qwen_expert.eval()
+            for params in self.qwen_expert.parameters():
+                params.requires_grad = False
+        
+        if self.config.train_awa:
+            print("Training awa model")
+            for params in self.awa_model.parameters():
+                params.requires_grad = True
+            for params in self.kv_mask.parameters():
+                params.requires_grad = True
+            for params in self.kv_repre.parameters():
+                params.requires_grad = True
+        else:
+            print("Freezing awa model")
+            self.awa_model.eval()
+            for params in self.awa_model.parameters():
+                params.requires_grad = False
+            for params in self.kv_mask.parameters():
+                params.requires_grad = False
+            for params in self.kv_repre.parameters():
+                params.requires_grad = False
+            self.kv_mask.eval()
+            self.kv_repre.eval()
+        
+        if self.config.train_full_vlm:
+            print("Training full vlm")
+            self.qwen25vl.train()
+            for params in self.qwen25vl.parameters():
+                params.requires_grad = True
+        else:
+            print("Freezing qwen25vl")
+            self.qwen25vl.eval()
+            for params in self.qwen25vl.parameters():
+                params.requires_grad = False
+            if self.config.train_main_layers > 0:
+                print(f"Training {self.config.train_main_layers} layers of qwen25vl")
                 self.qwen25vl.model.train()
-                for params in self.qwen25vl.parameters():
+                for params in self.qwen25vl.model.parameters():
                     params.requires_grad = False
                 for layer_idx in range(self.config.train_main_layers):
                     for params in self.qwen25vl.model.layers[-layer_idx-1].parameters():
                         params.requires_grad = True
-        else:
-            print("Training qwen25vl")
-            self.qwen25vl.train()
-            for params in self.qwen25vl.parameters():
-                params.requires_grad = True
+            else:
+                print("Freezing full qwen25vl")
+        
+        
+        # if self.config.train_expert_only:
+        #     print(f"Freezing qwen25vl, setting {self.config.train_main_layers} layers unfrozen")
+        #     if self.config.train_main_layers == 0:
+        #         self.qwen25vl.eval()
+        #         for params in self.qwen25vl.parameters():
+        #             params.requires_grad = False
+        #     else:
+        #         self.qwen25vl.model.train()
+        #         for params in self.qwen25vl.parameters():
+        #             params.requires_grad = False
+        #         for layer_idx in range(self.config.train_main_layers):
+        #             for params in self.qwen25vl.model.layers[-layer_idx-1].parameters():
+        #                 params.requires_grad = True
+        # else:
+        #     print("Training qwen25vl")
+        #     self.qwen25vl.train()
+        #     for params in self.qwen25vl.parameters():
+        #         params.requires_grad = True
                         
         if self.config.freeze_vision_encoder:
             print("Freezing vision encoder")
@@ -641,6 +700,7 @@ class PaliGemmaWithExpertModel(PreTrainedModel):
                 params.requires_grad = False
         else:
             print("Training vision encoder")
+            assert self.config.train_full_vlm == True, "Vision encoder is only trainable if full vlm is trainable"
             self.qwen25vl.visual.train()
             for params in self.qwen25vl.visual.parameters():
                 params.requires_grad = True

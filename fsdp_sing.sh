@@ -14,6 +14,9 @@ SAVE_FREQ=2000
 SCHEDULER_PLATFORM_STEPS=1
 PRETRAINED_PATH=""
 GRADIENT_ACCUMULATION_STEPS=4
+TRAIN_FULL_VLM=1
+TRAIN_AWA=1
+TRAIN_EXPERT=1
 
 # 解析命令行参数
 while [[ $# -gt 0 ]]; do
@@ -56,6 +59,18 @@ while [[ $# -gt 0 ]]; do
             ;;
         --optimizer_lr)
             OPTIMIZER_LR="$2"
+            shift 2
+            ;;
+        --full_vlm)
+            TRAIN_FULL_VLM="$2"
+            shift 2
+            ;;
+        --expert)
+            TRAIN_EXPERT="$2"
+            shift 2
+            ;;
+        --awa)
+            TRAIN_AWA="$2"
             shift 2
             ;;
         --scheduler_decay_lr)
@@ -120,9 +135,11 @@ torchrun \
     --policy.scheduler_platform_steps=$SCHEDULER_PLATFORM_STEPS \
     --policy.optimizer_lr=$OPTIMIZER_LR \
     --policy.scheduler_decay_lr=$OPTIMIZER_DECAY_LR \
-    --policy.train_main_layers=0 \
-    --policy.freeze_vision_encoder=false \
+    --policy.freeze_vision_encoder=true \
     --policy.train_expert_only=false \
+    --policy.train_awa=$TRAIN_AWA \
+    --policy.train_expert=$TRAIN_EXPERT \
+    --policy.train_full_vlm=$TRAIN_FULL_VLM \
     --policy.pretrained_path=$PRETRAINED_PATH \
     --wandb.enable=true \
     --wandb.project="pi0first" \
