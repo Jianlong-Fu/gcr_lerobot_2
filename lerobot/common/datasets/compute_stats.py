@@ -199,7 +199,8 @@ def aggregate_multi_stats(ls_datasets: list, data_names: list, max_dim: int) -> 
         for new_key, old_key in image_obs_keys.items():
             if old_key != None:
                 dataset.meta.stats[f"observation.images.{new_key}"] = dataset.meta.stats[f"observation.images.{old_key}"]
-                del dataset.meta.stats[f"observation.images.{old_key}"]
+                if new_key != old_key:
+                    del dataset.meta.stats[f"observation.images.{old_key}"]
         data_keys.update(dataset.meta.stats.keys())
         
     stats = {k: {} for k in data_keys}

@@ -50,7 +50,7 @@ class PI0Config(PreTrainedConfig):
     proj_width: int = 1024
 
     # Decoding
-    num_steps: int = 100
+    num_steps: int = 10
 
     # Attention utils
     use_cache: bool = True

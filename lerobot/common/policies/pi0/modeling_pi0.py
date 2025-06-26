@@ -249,13 +249,15 @@ class PI0Policy(PreTrainedPolicy):
         )
 
         tokenizer_path = "/data_16T/lerobot_openx/paligemma-3b-pt-224/"
-        tokenizer_path = "/mnt/wangxiaofa/RDT_module_params/paligemma-3b-pt-224/"
+        # tokenizer_path = "/mnt/wangxiaofa/RDT_module_params/paligemma-3b-pt-224/"
         self.language_tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
         self.model = PI0FlowMatching(config)
         
         self.dtype = torch.bfloat16
 
         self.reset()
+        
+        print(self.config.image_features)
 
     def reset(self):
         """This should be called whenever the environment is reset."""
@@ -263,6 +265,26 @@ class PI0Policy(PreTrainedPolicy):
 
     def get_optim_params(self) -> dict:
         return self.parameters()
+    
+    @torch.no_grad
+    def infer(self, batch, noise):
+        self.eval()
+        # batch = self.normalize_inputs(batch)
+        
+        images, img_masks = self.prepare_images(batch)
+        state = self.prepare_state(batch)
+        lang_tokens, lang_masks = self.prepare_language(batch)
+        
+        actions = self.model.sample_actions(
+                images, img_masks, lang_tokens, lang_masks, state, noise=noise
+            )
+        
+        original_action_dim = self.config.action_feature.shape[0]
+        actions = actions[:, :, :original_action_dim]
+
+        # actions = self.unnormalize_outputs({"action": actions})["action"]
+        
+        return actions.cpu()
 
     @torch.no_grad
     def select_action(self, batch: dict[str, Tensor], noise: Tensor | None = None) -> Tensor:
@@ -756,6 +778,6 @@ class PI0FlowMatching(nn.Module):
         )
         suffix_out = outputs_embeds[1]
         suffix_out = suffix_out[:, -self.config.n_action_steps :]
-        suffix_out = suffix_out.to(dtype=torch.float32)
+        # suffix_out = suffix_out.to(dtype=torch.float32)
         v_t = self.action_out_proj(suffix_out)
         return v_t

@@ -91,10 +91,11 @@ def prepare_images(item: dict):
     for i in range(video_length):
         video[i] = video[i].resize((112, 112))
     
-    # vision["image"].append(item["secondary"])
+    vision["image"].append(item["secondary"])
+    vision["image"].append(item["wrist"])
     default_image = Image.fromarray(np.ones((224, 224, 3), dtype=np.uint8))
-    vision["image"].append(default_image)
-    vision["image"].append(default_image)
+    # vision["image"].append(default_image)
+    # vision["image"].append(default_image)
     vision["video"] = video
     
     return vision
@@ -265,8 +266,18 @@ def predict():
         image_k4a_1 = Image.fromarray(image_k4a_1).resize((224,224))
         item["primary"].append(image_k4a_1)
     item["secondary"] = decode_b64_image(resp['images'][1])
-    item["secondary"] = item["secondary"][40:720,200:880,:]
+    # item["secondary"] = item["secondary"][40:720,200:880,:]
     item["secondary"] = Image.fromarray(item["secondary"]).resize((224,224))
+    
+    item["wrist"] = decode_b64_image(resp['images'][2])
+    wrist_shape = item["wrist"].shape
+    
+    if wrist_shape[0] > wrist_shape[1]:
+        # center crop
+        item["wrist"] = item["wrist"][:,wrist_shape[1]//2-wrist_shape[0]//2:wrist_shape[1]//2+wrist_shape[0]//2,:]
+    else:
+        item["wrist"] = item["wrist"][wrist_shape[0]//2-wrist_shape[1]//2:wrist_shape[0]//2+wrist_shape[1]//2,:,:]
+    item["wrist"] = Image.fromarray(item["wrist"]).resize((224,224))
     
     input = prepare_input(item, processor)
     input["action.mean"] = action_mean
@@ -274,7 +285,8 @@ def predict():
     
     actions = halo.infer(input).tolist() # 1 * 50 *32
     # actions = actions[0] # 50 * 32
-    actions = [row[:7] for row in actions[0]] # 50 * 7
+    actions = [row[:7] for row in actions[0]] # 50 * 7 eef pose
+    # actions = [row[6:14] for row in actions[0]] # 50 * 7 joint
     print(actions[:5])
     
     response_dict = {
@@ -286,7 +298,7 @@ def predict():
 @parser.wrap()
 def start_service(cfg: TrainPipelineConfig):
     
-    path_2_load = "/data_16T/deepseek/halo/step28000.pt"
+    path_2_load = "/data_16T/deepseek/halo/step60000.pt"
     cfg.policy.qwen_path = "/datassd_1T/qwen25vl/Qwen2.5-VL-7B-Instruct/"
     
     image_transforms = (ImageTransforms(cfg.dataset.image_transforms))
