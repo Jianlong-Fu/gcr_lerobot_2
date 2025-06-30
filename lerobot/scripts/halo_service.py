@@ -285,7 +285,7 @@ def predict():
     
     actions = halo.infer(input).tolist() # 1 * 50 *32
     # actions = actions[0] # 50 * 32
-    actions = [row[:7] for row in actions[0]] # 50 * 7 eef pose
+    actions = [row[:14] for row in actions[0]] # 50 * 7 eef pose
     # actions = [row[6:14] for row in actions[0]] # 50 * 7 joint
     print(actions[:5])
     
@@ -298,7 +298,7 @@ def predict():
 @parser.wrap()
 def start_service(cfg: TrainPipelineConfig):
     
-    path_2_load = "/data_16T/deepseek/halo/step60000.pt"
+    path_2_load = "/data_16T/deepseek/halo/step38000.pt"
     cfg.policy.qwen_path = "/datassd_1T/qwen25vl/Qwen2.5-VL-7B-Instruct/"
     
     image_transforms = (ImageTransforms(cfg.dataset.image_transforms))
