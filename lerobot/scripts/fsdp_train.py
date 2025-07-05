@@ -315,6 +315,9 @@ def train(cfg: TrainPipelineConfig):
     for params in policy.parameters():
         params.data = params.data.bfloat16()
         # params.data = params.data.to(dtype=torch.float16)
+    # 统计模型可训练参数的参数量
+    if rank == 0:
+        logger.info(f"Model trainable parameters: {sum(p.numel() for p in policy.parameters() if p.requires_grad)}")
     
     # FSDP包装配置
     # auto_wrap_policy = functools.partial(
