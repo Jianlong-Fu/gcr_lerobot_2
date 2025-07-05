@@ -1649,6 +1649,10 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             state_std = torch.ones(self.max_state_dim)
             state_std[:15] = self.stats["observation.state"]["std"][:15]
             item["observation.state"] = (item["observation.state"] - state_mean) / (state_std + 1e-8)
+            state = torch.zeros_like(item["observation.state"])
+            state_device = item["observation.state"].device
+            state[:8] = item["observation.state"][:8]
+            item["observation.state"] = state.to(state_device)
             
             action_mean = torch.zeros(self.max_action_dim)
             action_mean[:14] = self.stats["action"]["mean"][:14]
@@ -1658,6 +1662,10 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             # action_std[6] = 1.0
             # action_mean[6] = 0.0
             item["action"] = (item["action"] - action_mean) / (action_std + 1e-8)
+            action = torch.zeros_like(item["action"])
+            action_device = item["action"].device
+            action[:7] = item["action"][:7]
+            item["action"] = action.to(action_device)
             
         else:
             state_mean = torch.zeros(self.max_state_dim)

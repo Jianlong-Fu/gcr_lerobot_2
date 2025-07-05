@@ -1,5 +1,5 @@
-python lerobot/scripts/halo_service.py \
-    --policy.type="qwen" \
+python lerobot/scripts/pi0_service.py \
+    --policy.type="pi0" \
     --dataset.repo_id="whatever" \
     --dataset.processor="/datassd_1T/qwen25vl/Qwen2.5-VL-7B-Instruct/" \
     --dataset.parent_dir="/data_16T/lerobot_openx/" \

@@ -8,6 +8,7 @@ JOB_TYPE="pretrain"
 DATA_MIX="oxe_magic_soup_plus"
 OPTIMIZER_LR=2.5e-5
 OPTIMIZER_DECAY_LR=2.5e-6
+OPTIMIZER_WEIGHT_DECAY=1e-2
 SCHEDULER_WARMUP_STEPS=1000
 SCHEDULER_DECAY_STEPS=30000
 SAVE_FREQ=2000
@@ -60,6 +61,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --optimizer_lr)
             OPTIMIZER_LR="$2"
+            shift 2
+            ;;
+        --weight_decay)
+            OPTIMIZER_WEIGHT_DECAY="$2"
             shift 2
             ;;
         --full_vlm)
@@ -129,7 +134,7 @@ torchrun \
     --policy.type="qwen" \
     --output_dir="$FIXED_OUTPUT_DIR" \
     --dataset.repo_id="whatever" \
-    --batch_size=10 \
+    --batch_size=16 \
     --save_freq=$SAVE_FREQ \
     --gradient_accumulation_steps=$GRADIENT_ACCUMULATION_STEPS \
     --data_mix=$DATA_MIX \
@@ -139,6 +144,7 @@ torchrun \
     --policy.scheduler_decay_steps=$SCHEDULER_DECAY_STEPS \
     --policy.scheduler_platform_steps=$SCHEDULER_PLATFORM_STEPS \
     --policy.optimizer_lr=$OPTIMIZER_LR \
+    --policy.optimizer_weight_decay=$OPTIMIZER_WEIGHT_DECAY \
     --policy.scheduler_decay_lr=$OPTIMIZER_DECAY_LR \
     --policy.freeze_vision_encoder=$FREEZE_VISION \
     --policy.train_expert_only=false \
