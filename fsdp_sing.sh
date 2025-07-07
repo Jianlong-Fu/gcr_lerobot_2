@@ -134,7 +134,7 @@ torchrun \
     --policy.type="qwen" \
     --output_dir="$FIXED_OUTPUT_DIR" \
     --dataset.repo_id="whatever" \
-    --dataset.image_transforms.enable=true \
+    --dataset.image_transforms.enable=false \
     --batch_size=4 \
     --save_freq=$SAVE_FREQ \
     --gradient_accumulation_steps=$GRADIENT_ACCUMULATION_STEPS \
