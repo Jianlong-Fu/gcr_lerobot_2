@@ -17,6 +17,7 @@ from lerobot.configs import parser
 from lerobot.configs.train import TrainPipelineConfig
 from lerobot.common.policies.factory import make_policy
 from lerobot.common.datasets.transforms import ImageTransforms
+from lerobot.common.datasets.utils import cycle
 from lerobot.common.datasets.lerobot_dataset import MultiDatasetforDistTraining
 
 def pad_vector(vector, new_dim):
@@ -306,10 +307,23 @@ def predict():
     return jsonify(response_dict)
 # load qwen2.5vl's vl processor when calling __init__
 
+@app.route('/modelbench', methods=['GET'])
+def modelbench():
+    global dataset
+    benchloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=True, num_workers=2)
+    loader_cycler = cycle(benchloader)
+    batch = next(loader_cycler)
+    for k, v in batch.items():
+        print(k)
+    
+    actions = halo.infer(batch).tolist() # 1 * 50 *32
+    print(actions)
+    return 'Model benchmarking service!'
+
 @parser.wrap()
 def start_service(cfg: TrainPipelineConfig):
     
-    path_2_load = "/data_16T/deepseek/halo/step10000.pt"
+    path_2_load = "/data_16T/deepseek/halo/step20000.pt"
     cfg.policy.qwen_path = "/datassd_1T/qwen25vl/Qwen2.5-VL-7B-Instruct/"
     
     image_transforms = (ImageTransforms(cfg.dataset.image_transforms))
@@ -363,9 +377,9 @@ def start_service(cfg: TrainPipelineConfig):
     
     device = "cuda:0"
     
-    return device, halo, processor, state_mean, state_std, action_mean, action_std
+    return device, halo, processor, state_mean, state_std, action_mean, action_std, dataset
 
 if __name__ == '__main__':
-    device, halo, processor, state_mean, state_std, action_mean, action_std = start_service()
+    device, halo, processor, state_mean, state_std, action_mean, action_std, dataset = start_service()
     image_pool = {}
     app.run(host='0.0.0.0', port=7777)
