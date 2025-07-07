@@ -1492,8 +1492,8 @@ class PaliGemmaWithExpertModel(PreTrainedModel):
             hidden_states = checkpoint(
                 blk,
                 hidden_states,
-                cu_seqlens_now,
-                position_embeddings,
+                cu_seqlens=cu_seqlens_now,
+                position_embeddings=position_embeddings,
                 use_reentrant=False,
             )
             # hidden_states = blk(hidden_states, cu_seqlens=cu_seqlens_now, position_embeddings=position_embeddings)
