@@ -59,11 +59,12 @@ def decode_b64_image(b64image):
     image_cv2 = cv2.imdecode(np_image, cv2.IMREAD_COLOR)
     # Get h,w of image
     h, w, _ = image_cv2.shape
+    image_cv2 = cv2.cvtColor(image_cv2, cv2.COLOR_BGR2RGB)
     #Crop the image retain the mid area to be a square
-    if h > w:
-        image_cv2 = image_cv2[int((h-w)/2):int((h+w)/2), :, :]
-    elif w > h:
-        image_cv2 = image_cv2[:, int((w-h)/2):int((w+h)/2), :]
+    # if h > w:
+    #     image_cv2 = image_cv2[int((h-w)/2):int((h+w)/2), :, :]
+    # elif w > h:
+    #     image_cv2 = image_cv2[:, int((w-h)/2):int((w+h)/2), :]
     return image_cv2
 
 def prepare_images(item: dict):
@@ -202,6 +203,12 @@ def prepare_input(item, processor):
     
     item["observation.state"] = pad_vector(item["observation.state"], 32)
     item["observation.state"] = (item["observation.state"] - item["mean"]) / (item["std"] + 1e-8)
+    state = torch.zeros_like(item["observation.state"])
+    state_device = item["observation.state"].device
+    state_dtype = item["observation.state"].dtype
+    state[:8] = item["observation.state"][:8]
+    state = state.to(device = state_device, dtype = state_dtype)
+    item["observation.state"] = state
     
     data_dict = {
         "observation.state": item["observation.state"].unsqueeze(0),
@@ -264,10 +271,13 @@ def predict():
         image_k4a_1 = decode_b64_image(img)
         image_k4a_1 = image_k4a_1[40:720,200:880,:] 
         image_k4a_1 = Image.fromarray(image_k4a_1).resize((224,224))
+        # save image for visulization
+        image_k4a_1.save("k4a.jpg")
         item["primary"].append(image_k4a_1)
     item["secondary"] = decode_b64_image(resp['images'][1])
     # item["secondary"] = item["secondary"][40:720,200:880,:]
     item["secondary"] = Image.fromarray(item["secondary"]).resize((224,224))
+    item["secondary"].save("real_1.jpg")
     
     item["wrist"] = decode_b64_image(resp['images'][2])
     wrist_shape = item["wrist"].shape
@@ -278,6 +288,7 @@ def predict():
     else:
         item["wrist"] = item["wrist"][wrist_shape[0]//2-wrist_shape[1]//2:wrist_shape[0]//2+wrist_shape[1]//2,:,:]
     item["wrist"] = Image.fromarray(item["wrist"]).resize((224,224))
+    item["wrist"].save("real_2.jpg")
     
     input = prepare_input(item, processor)
     input["action.mean"] = action_mean
@@ -298,7 +309,7 @@ def predict():
 @parser.wrap()
 def start_service(cfg: TrainPipelineConfig):
     
-    path_2_load = "/data_16T/deepseek/halo/step38000.pt"
+    path_2_load = "/data_16T/deepseek/halo/step10000.pt"
     cfg.policy.qwen_path = "/datassd_1T/qwen25vl/Qwen2.5-VL-7B-Instruct/"
     
     image_transforms = (ImageTransforms(cfg.dataset.image_transforms))

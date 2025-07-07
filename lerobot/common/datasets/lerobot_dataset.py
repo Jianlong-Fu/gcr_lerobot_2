@@ -1719,7 +1719,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
                 else:
                     vision['video'] = video
                 
-                vision["image"].append(vision["video"][-1])
+                vision["image"].append(vision["video"][-1].resize(224, 224))
                 # Resize frames in the video
                 for i in range(len(vision['video'])):
                     vision["video"][i] = vision["video"][i].resize((112, 112))
@@ -1729,10 +1729,13 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
                     if len(item[key]) > 0:
                         vision["image"].append(item[key][0])
                 elif isinstance(item[key], Image.Image):
-                    vision["image"].append(item[key])
+                    vision["image"].append(item[key].resize(224, 224))
                 else:
                     logging.warning(f"Unexpected type for {key}: {type(item[key])}, from {item['source']}")
-
+        # index_vision = 0
+        # for img in vision["image"]:
+        #     img.save(f"{index_vision}.jpg")
+        #     index_vision += 1
         return vision
 
     def _prepare_language(self, vision, item):
@@ -1775,6 +1778,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
     def _prepare_data(self, item):
         
         vision = self._prepare_images(item)
+
         task = self._prepare_language(vision, item)
         
         text = item["task"]
@@ -1898,8 +1902,8 @@ def dataset_func_test(cfg: TrainPipelineConfig):
         cfg=cfg,
         image_transforms=image_transforms,
         seed=cfg.seed,
-        data_mix="oxe_magic_soup_plus",
-        vla2root_json="vla2root_bak_single.json"
+        data_mix="pizza",
+        vla2root_json="pizza.json"
     )
     
     item = dataset[0]
@@ -1912,7 +1916,8 @@ def dataset_func_test(cfg: TrainPipelineConfig):
     dataloader = torch.utils.data.DataLoader(
         dataset,
         collate_fn=extra_collate_fn,
-        batch_size=2
+        batch_size=2, 
+        shuffle=True
     )
     dl_iter = cycle(dataloader)
     batch = next(dl_iter)
