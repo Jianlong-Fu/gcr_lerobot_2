@@ -1491,7 +1491,7 @@ class PaliGemmaWithExpertModel(PreTrainedModel):
                 cu_seqlens_now = cu_window_seqlens
             # hidden_states = blk(hidden_states, cu_seqlens=cu_seqlens_now, position_embeddings=position_embeddings)
             
-            if layer_num % 3 == 2:
+            if layer_num % 2 == 1:
                 hidden_states = checkpoint(
                     blk,
                     hidden_states,
