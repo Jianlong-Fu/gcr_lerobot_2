@@ -19,6 +19,7 @@ FREEZE_VISION="false"
 TRAIN_FULL_VLM='true'
 TRAIN_AWA='true'
 TRAIN_EXPERT='true'
+IMAGE_AUG='true'
 
 # 解析命令行参数
 while [[ $# -gt 0 ]]; do
@@ -83,6 +84,10 @@ while [[ $# -gt 0 ]]; do
             FREEZE_VISION="$2"
             shift 2
             ;;
+        --aug)
+            IMAGE_AUG="$2"
+            shift 2
+            ;;
         --scheduler_decay_lr)
             OPTIMIZER_DECAY_LR="$2"
             shift 2
@@ -134,7 +139,7 @@ torchrun \
     --policy.type="qwen" \
     --output_dir="$FIXED_OUTPUT_DIR" \
     --dataset.repo_id="whatever" \
-    --dataset.image_transforms.enable=true \
+    --dataset.image_transforms.enable=$IMAGE_AUG \
     --batch_size=8 \
     --save_freq=$SAVE_FREQ \
     --gradient_accumulation_steps=$GRADIENT_ACCUMULATION_STEPS \
