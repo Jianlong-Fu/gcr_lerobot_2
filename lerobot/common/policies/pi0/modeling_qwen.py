@@ -327,7 +327,7 @@ class QwenPolicy(PreTrainedPolicy):
         video_grid_thw = batch["video_grid_thw"]
         second_per_grid_ts = batch["second_per_grid_ts"]
         
-        print(f"attention_mask: {attention_mask.shape}")
+        # print(f"attention_mask: {attention_mask.shape}")
         
         mean = batch["action.mean"]
         std = batch["action.std"]

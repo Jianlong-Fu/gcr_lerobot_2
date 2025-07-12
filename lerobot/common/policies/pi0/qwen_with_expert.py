@@ -1450,6 +1450,7 @@ class PaliGemmaWithExpertModel(PreTrainedModel):
         # print(f"Into custom visual processing, input states: \nhidden_states: {hidden_states.shape}, grid_thw: {grid_thw.shape}")
         hidden_states = self.qwen25vl.visual.patch_embed(hidden_states)
         # print(f"After patch embedding, hidden_states: {hidden_states.shape}")
+        # print(grid_thw)
         rot_pos_emb = self.qwen25vl.visual.rot_pos_emb(grid_thw)
         window_index, cu_window_seqlens = self.qwen25vl.visual.get_window_index(grid_thw)
         
@@ -1488,15 +1489,18 @@ class PaliGemmaWithExpertModel(PreTrainedModel):
                 cu_seqlens_now = cu_seqlens
             else:
                 cu_seqlens_now = cu_window_seqlens
-            
-            hidden_states = checkpoint(
-                blk,
-                hidden_states,
-                cu_seqlens=cu_seqlens_now,
-                position_embeddings=position_embeddings,
-                use_reentrant=False,
-            )
             # hidden_states = blk(hidden_states, cu_seqlens=cu_seqlens_now, position_embeddings=position_embeddings)
+            
+            if layer_num % 3 == 2:
+                hidden_states = checkpoint(
+                    blk,
+                    hidden_states,
+                    cu_seqlens=cu_seqlens_now,
+                    position_embeddings=position_embeddings,
+                    use_reentrant=False,
+                )
+            else:
+                hidden_states = blk(hidden_states, cu_seqlens=cu_seqlens_now, position_embeddings=position_embeddings)
             
         hidden_states = self.qwen25vl.visual.merger(hidden_states)
         reverse_indices = torch.argsort(window_index)

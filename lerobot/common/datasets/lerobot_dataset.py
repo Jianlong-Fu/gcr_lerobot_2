@@ -853,10 +853,10 @@ class LeRobotDataset(torch.utils.data.Dataset):
                 video_frames = self._query_videos(query_timestamps, ep_idx, primary_obs_key=primary_obs_key)
             item = {**video_frames, **item}
 
-        if self.image_transforms is not None:
-            image_keys = self.meta.camera_keys
-            for cam in image_keys:
-                item[cam] = self.image_transforms(item[cam])
+        # if self.image_transforms is not None:
+        #     image_keys = self.meta.camera_keys
+        #     for cam in image_keys:
+        #         item[cam] = self.image_transforms(item[cam])
 
         # Add task as a string
         task_idx = item["task_index"].item()
@@ -1545,11 +1545,22 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             item = selected_dataset[data_id]
             dataset_name = self.dataset_names[ds_id]
             item["dataset_name"] = dataset_name
+            data_config = OXE_DATASET_CONFIGS[dataset_name]
+            image_obs_keys = data_config["image_obs_keys"]
+            
+            for new_key, old_key in image_obs_keys.items():
+                if new_key == "primary":
+                    if old_key != None:
+                        item[f"observation.images.{old_key}"] = item[f"observation.images.{old_key}"][-self.cfg.policy.max_frame:]
+            
+            if selected_dataset.image_transforms is not None:
+                image_keys = selected_dataset.meta.camera_keys
+                for cam in image_keys:
+                    item[cam] = selected_dataset.image_transforms(item[cam])
+            
             # selected_dataset = random.choices(self.datasets, weights=self.sample_weights, k=1)[0]
             # dataset_index = self.datasets.index(selected_dataset)
             # dataset_name = self.dataset_names[dataset_index]
-            data_config = OXE_DATASET_CONFIGS[dataset_name]
-            image_obs_keys = data_config["image_obs_keys"]
             
             data_dict = self._fetch_data_dict(item, image_obs_keys)
             
@@ -1596,6 +1607,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
                 # if missing, use zero image
                 key_to_pad.append(new_key)
         
+        
         exist_image_valide = False
         if exist_image is not None:
             if isinstance(exist_image, list):
@@ -1638,6 +1650,8 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         item["action"] = self.pad_vector(item["action"], self.max_action_dim)
         item["observation.state"] = self.pad_vector(item["observation.state"], self.max_state_dim)
         
+        ori_action = copy.deepcopy(item["action"])
+        ori_state = copy.deepcopy(item["observation.state"])
         # Normlize the action and observation vectors
         if "agi" in item['dataset_name']:
             item["action"] = (item["action"] - self.stats["action"]["mean"]) / (self.stats["action"]["std"] + 1e-8)
@@ -1651,7 +1665,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             item["observation.state"] = (item["observation.state"] - state_mean) / (state_std + 1e-8)
             state = torch.zeros_like(item["observation.state"])
             state_device = item["observation.state"].device
-            state[:8] = item["observation.state"][:8]
+            state[:8] = item["observation.state"][:8] # 32
             item["observation.state"] = state.to(state_device)
             
             action_mean = torch.zeros(self.max_action_dim)
@@ -1664,7 +1678,11 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             item["action"] = (item["action"] - action_mean) / (action_std + 1e-8)
             action = torch.zeros_like(item["action"])
             action_device = item["action"].device
-            action[:7] = item["action"][:7]
+            # action_len = item["action"].shape[0]
+            # for idx in range(action_len):
+            #     action[idx][:7] = item["action"][idx][:7]
+            # action[:][:7] = item["action"][:][:7]
+            action[:, :7] = item["action"][:, :7] # 50 x 7
             item["action"] = action.to(action_device)
             
         else:
@@ -1686,6 +1704,8 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             "source": item["source"],
             "observation.state": item["observation.state"],
             "action": item["action"],
+            # "ori_action": ori_action,
+            # "ori_state": ori_state,
             **vl_item,
         }
         
@@ -1732,10 +1752,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
                     vision["image"].append(item[key].resize((224, 224)))
                 else:
                     logging.warning(f"Unexpected type for {key}: {type(item[key])}, from {item['source']}")
-        # index_vision = 0
-        # for img in vision["image"]:
-        #     img.save(f"{index_vision}.jpg")
-        #     index_vision += 1
+        
         return vision
 
     def _prepare_language(self, vision, item):
@@ -1901,11 +1918,14 @@ def dataset_func_test(cfg: TrainPipelineConfig):
     dataset = MultiDatasetforDistTraining(
         cfg=cfg,
         image_transforms=image_transforms,
-        seed=cfg.seed,
+        seed=10086,
+        # seed=cfg.seed,
         data_mix="pizza",
-        vla2root_json="pizza.json"
+        # vla2root_json="pizza.json",
+        vla2root_json="vla2root_bak_single.json"
     )
-    
+    action_mean = dataset.stats["action"]["mean"]
+    action_std = dataset.stats["action"]["std"]
     item = dataset[0]
     for key, value in item.items():
         if isinstance(value, torch.Tensor):
@@ -1916,13 +1936,26 @@ def dataset_func_test(cfg: TrainPipelineConfig):
     dataloader = torch.utils.data.DataLoader(
         dataset,
         collate_fn=extra_collate_fn,
-        batch_size=2, 
+        batch_size=1, 
         shuffle=True
     )
     dl_iter = cycle(dataloader)
     batch = next(dl_iter)
     keys = list(batch.keys())
     print(f"batch:{keys}")
+    
+    for i in range(10):
+        print("=========================================")
+        batch = next(dl_iter)
+        # print(batch['ori_action'][0][5][:6])
+        # print(batch['action'][0][5][:6])
+        # action_after_denorm = batch['action']*(action_std+1e-8) + action_mean
+        # print(action_after_denorm[0][5][:6])
+        # print(f"ori state: {batch['ori_state'][0][:16]}")
+        # print(f"source: {batch['source']}")
+        print(f"Actual action: {batch['action'][0][10]}")
+        print("\n=========================================")
+        # print(f"action: {batch['action'][0][0][:6]}")
     for key in keys:
         print(f"Value type for key {key}: {type(batch[key])}")
         if isinstance(batch[key], torch.Tensor):
@@ -1949,7 +1982,7 @@ def dataset_func_test(cfg: TrainPipelineConfig):
 def extra_collate_fn(batch):
     collated = {}
     key_to_pad = ["input_ids", "attention_mask"]
-    key_to_default_collate = ["observation.state", "action"]
+    key_to_default_collate = ["observation.state", "ori_state", "action", "ori_action"]
     key_to_append_to_list = ["second_per_grid_ts"]
     for key in batch[0].keys():
         items = [sample[key] for sample in batch]
