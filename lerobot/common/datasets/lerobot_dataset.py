@@ -1920,7 +1920,7 @@ def dataset_func_test(cfg: TrainPipelineConfig):
         image_transforms=image_transforms,
         seed=10086,
         # seed=cfg.seed,
-        data_mix="pizza",
+        data_mix="pizza_single",
         # vla2root_json="pizza.json",
         vla2root_json="vla2root_bak_single.json"
     )
@@ -1937,8 +1937,10 @@ def dataset_func_test(cfg: TrainPipelineConfig):
         dataset,
         collate_fn=extra_collate_fn,
         batch_size=1, 
-        shuffle=True
+        shuffle=True,
+        num_workers=2
     )
+    # batch = dataloader[0]
     dl_iter = cycle(dataloader)
     batch = next(dl_iter)
     keys = list(batch.keys())
