@@ -372,17 +372,17 @@ def predict():
         image_k4a_1 = image_k4a_1[40:720,200:880,:] 
         image_k4a_1 = Image.fromarray(image_k4a_1).resize((224,224))
         # save image for visulization
-        image_k4a_1.save("k4a.jpg")
+        image_k4a_1.save("/home/v-wenhuitan/pi_0_open/media/obs/k4a.jpg")
         item["primary"].append(image_k4a_1)
     item["secondary"] = decode_b64_image(resp['images'][1])
     # item["secondary"] = item["secondary"][40:720,200:880,:]
     item["secondary"] = Image.fromarray(item["secondary"]).resize((224,224))
-    item["secondary"].save("real_1.jpg")
+    item["secondary"].save("/home/v-wenhuitan/pi_0_open/media/obs/real_1.jpg")
     
     item["wrist"] = decode_b64_image(resp['images'][2])
     wrist_shape = item["wrist"].shape
     print(wrist_shape)
-    # item["wrist"].save("real_2_ori.jpg")
+    # item["wrist"].save("/home/v-wenhuitan/pi_0_open/media/obs/real_2_ori.jpg")
     if wrist_shape[0] > wrist_shape[1]:
         # center crop
         item["wrist"] = item["wrist"][wrist_shape[0]//2 - wrist_shape[1]//2:wrist_shape[0]//2 + wrist_shape[1]//2,:,:]
@@ -390,7 +390,7 @@ def predict():
         item["wrist"] = item["wrist"][:,wrist_shape[1]//2-wrist_shape[0]//2:wrist_shape[1]//2+wrist_shape[0]//2,:]
     
     item["wrist"] = Image.fromarray(item["wrist"]).resize((224,224))
-    item["wrist"].save("real_2.jpg")
+    item["wrist"].save("/home/v-wenhuitan/pi_0_open/media/obs/real_2.jpg")
     
     
     input = prepare_input(item, processor)
@@ -441,14 +441,14 @@ def exp_predict():
         
         item["primary"].append(image_k4a_1)
     image_k4a_1 = Image.open("/home/v-wenhuitan/pi_0_open/media/primary-3969-9.jpg").resize((224,224))
-    image_k4a_1.save("k4a.jpg")
+    image_k4a_1.save("/home/v-wenhuitan/pi_0_open/media/obs/k4a.jpg")
     item["primary"].append(image_k4a_1)
     item["secondary"] = decode_b64_image(resp['images'][1])
     # item["secondary"] = item["secondary"][40:720,200:880,:]
     item["secondary"] = Image.fromarray(item["secondary"]).resize((224,224))
-    item["secondary"].save("real_1.jpg")
+    item["secondary"].save("/home/v-wenhuitan/pi_0_open/media/obs/real_1.jpg")
     item["secondary"] = Image.open("/home/v-wenhuitan/pi_0_open/media/secondary-3969.jpg").resize((224,224))
-    item["secondary"].save("real_1.jpg")
+    item["secondary"].save("/home/v-wenhuitan/pi_0_open/media/obs/real_1.jpg")
     
     item["wrist"] = decode_b64_image(resp['images'][2])
     wrist_shape = item["wrist"].shape
@@ -459,7 +459,7 @@ def exp_predict():
     else:
         item["wrist"] = item["wrist"][:,wrist_shape[1]//2-wrist_shape[0]//2:wrist_shape[1]//2+wrist_shape[0]//2,:]
     item["wrist"] = Image.fromarray(item["wrist"]).resize((224,224))
-    item["wrist"].save("real_2.jpg")
+    item["wrist"].save("/home/v-wenhuitan/pi_0_open/media/obs/real_2.jpg")
     
     input = prepare_input(item, processor)
     input["action.mean"] = action_mean
@@ -509,8 +509,9 @@ def modelbench():
 @parser.wrap()
 def start_service(cfg: TrainPipelineConfig):
     
-    path_2_load = "/data_16T/deepseek/halo/step4000.pt"
+    path_2_load = "/data_16T/deepseek/halo/step2000.pt"
     cfg.policy.qwen_path = "/datassd_1T/qwen25vl/Qwen2.5-VL-7B-Instruct/"
+    device = "cuda:0"
     
     model_bench = False
     
@@ -573,9 +574,7 @@ def start_service(cfg: TrainPipelineConfig):
     halo = policy
     halo.eval()
 
-    halo.to(device="cuda:0")
-    
-    device = "cuda:0"
+    halo.to(device=device)
     
     init_errors = []
     step_5_errors = []
@@ -587,7 +586,7 @@ def start_service(cfg: TrainPipelineConfig):
     if model_bench:
         benchloader = torch.utils.data.DataLoader(dataset, batch_size=20, shuffle=True, collate_fn=extra_collate_fn, num_workers=4)
         loader_cycler = cycle(benchloader)
-        for i in tqdm(range(2000)):
+        for i in tqdm(range(200)):
             batch = next(loader_cycler)
             print(batch['source'])
             # print(batch['action'][0][0])# bacth x chunk size x action dim

@@ -1747,7 +1747,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             else:
                 if isinstance(item[key], list):
                     if len(item[key]) > 0:
-                        vision["image"].append(item[key][0])
+                        vision["image"].append(item[key][0].resize((224, 224)))
                 elif isinstance(item[key], Image.Image):
                     vision["image"].append(item[key].resize((224, 224)))
                 else:
@@ -1823,7 +1823,12 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
                 }
             )
         message[0]["content"].append({"type": "text", "text": text})
-
+        
+        # for atem in message[0]['content']:
+        #     if atem["type"] == "image":
+        #         print(f"Image size: {atem['image'].size}")
+        #     elif atem["type"] == "video":
+        #         print(f"Video frame size: {atem['video'][0].size}")
         image_inputs, video_inputs, video_kwargs = process_vision_info(message, return_video_kwargs=True)
         
         inputs = self.processor(
@@ -1920,9 +1925,10 @@ def dataset_func_test(cfg: TrainPipelineConfig):
         image_transforms=image_transforms,
         seed=10086,
         # seed=cfg.seed,
-        data_mix="pizza_single",
-        # vla2root_json="pizza.json",
-        vla2root_json="vla2root_bak_single.json"
+        data_mix="pizza",
+        # data_mix="pizza_single",
+        vla2root_json="pizza.json",
+        # vla2root_json="vla2root_bak_single.json"
     )
     action_mean = dataset.stats["action"]["mean"]
     action_std = dataset.stats["action"]["std"]
