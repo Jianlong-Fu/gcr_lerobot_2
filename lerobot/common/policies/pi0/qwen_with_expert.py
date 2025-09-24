@@ -15,7 +15,7 @@ from transformers import (
     PretrainedConfig,
     PreTrainedModel,
 )
-from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLAttention
+from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import Qwen2RMSNorm
 import transformers.modeling_outputs
 from transformers.modeling_flash_attention_utils import _flash_attention_forward
 from transformers.processing_utils import Unpack
@@ -400,25 +400,6 @@ class DimensionalSqueezeBack(nn.Module):
 
         return x
     
-class Qwen2RMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        Qwen2RMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-    
 class KVCompress(nn.Module):
     def __init__(self, in_dim=4, out_dim=2, hiddem_dim=128):
         super().__init__()
@@ -488,6 +469,10 @@ class KvLearnableMask(nn.Module):
         self.k_norm = Qwen2RMSNorm(hidden*in_head[0]*in_head[1])
         
     def forward(self, k, v):
+        dtype = self.k_mask.dtype
+        kv_dtype = k.dtype
+        k = k.to(dtype)
+        v = v.to(dtype)
         k_shape = k.shape
         K_init = k.clone().reshape(k_shape[0], -1, k_shape[2]*k_shape[3]) # -> (batch_size, seq_len, head1*head2*head_dim)
         V_init = v.clone().reshape(k_shape[0], -1, k_shape[2]*k_shape[3]) # -> (batch_size, seq_len, head1*head2*head_dim)
@@ -506,6 +491,9 @@ class KvLearnableMask(nn.Module):
         
         k = k.reshape(k_shape[0], k_shape[1], k_shape[2], k_shape[3]) # -> (batch_size, seq_len, head1, head_dim)
         v = v.reshape(k_shape[0], k_shape[1], k_shape[2], k_shape[3]) # -> (batch_size, seq_len, head1, head_dim)
+        
+        k = k.to(kv_dtype)
+        v = v.to(kv_dtype)
         
         return k, v
         
@@ -535,13 +523,19 @@ class KvRepresentation(nn.Module):
         
     def forward(self, x, x_ori):
         # x -> (batch_size, seq_len, head1*head2, head_dim)
+        norm_dtype = self.norm_1.weight.dtype
+        x_dtype = x.dtype
         
         x = x.reshape(x.shape[0], -1, x.shape[2]*x.shape[3]) # -> (batch_size, seq_len, head1*head2*head_dim)
         x_ori = x_ori.reshape(x_ori.shape[0], -1, x_ori.shape[2]*x_ori.shape[3]) # -> (batch_size, seq_len, head1*head2*head_dim)
         x = self.linear_1(x) # -> (batch_size, seq_len, head2*head_dim)
+        x = x.to(norm_dtype)
         x = self.norm_1(x)
+        x = x.to(x_dtype)
         x = x + x_ori
+        x = x.to(norm_dtype)
         x = self.norm_2(x)
+        x = x.to(x_dtype)
         
         # y = x.clone()
         # x = self.linear1(x) # -> [B, len, 128, 128]
@@ -554,7 +548,9 @@ class KvRepresentation(nn.Module):
         
         y = x.clone()
         
+        x = x.to(norm_dtype)
         x = self.norm_3(x)
+        x = x.to(x_dtype)
         x = self.activate_3(x)
         x = self.linear_2(x) # -> (batch_size, seq_len, head2*head_dim)
         
@@ -614,7 +610,7 @@ class PaliGemmaWithExpertModel(PreTrainedModel):
         #     DimensionalSqueezeBack(in_dim=2048*4, out_dim=2048) for _ in range(num_layers)
         # ])
 
-        self.to_bfloat16_like_physical_intelligence()
+        self.set_dtype()
         self.set_requires_grad()
         
     def init_load(self, path):
@@ -714,20 +710,34 @@ class PaliGemmaWithExpertModel(PreTrainedModel):
         # if self.config.train_expert_only:
         #     self.paligemma.eval()
 
-    def to_bfloat16_like_physical_intelligence(self):
+    def set_dtype(self):
         self.qwen25vl = self.qwen25vl.to(dtype=torch.bfloat16)
+        self.awa_model = self.awa_model.to(dtype=torch.bfloat16)
         self.qwen_expert = self.qwen_expert.to(dtype=torch.bfloat16)
-        # self.paligemma = self.paligemma.to(dtype=torch.bfloat16)
-
+        self.kv_repre = self.kv_repre.to(dtype=torch.bfloat16)
+        self.kv_mask = self.kv_mask.to(dtype=torch.bfloat16)
+        
         params_to_change_dtype = [
-            "language_model.model.layers",
-            "qwen_expert.model.layers",
-            "visual",
+            "norm",
+            "kv_mask",
+            # "visual",
             # "multi_modal",
         ]
         for name, param in self.named_parameters():
             if any(selector in name for selector in params_to_change_dtype):
-                param.data = param.data.to(dtype=torch.bfloat16)
+                print(f"Setting {name} to float32")
+                param.data = param.data.to(dtype=torch.float32)
+        # self.paligemma = self.paligemma.to(dtype=torch.bfloat16)
+
+        # params_to_change_dtype = [
+        #     "language_model.model.layers",
+        #     "qwen_expert.model.layers",
+        #     "visual",
+        #     # "multi_modal",
+        # ]
+        # for name, param in self.named_parameters():
+        #     if any(selector in name for selector in params_to_change_dtype):
+        #         param.data = param.data.to(dtype=torch.bfloat16)
 
     def embed_image(self, image: torch.Tensor):
         return self.paligemma.get_image_features(image)
@@ -868,7 +878,11 @@ class PaliGemmaWithExpertModel(PreTrainedModel):
                                                         position_embeddings_exp=position_embeddings_exp
                                                         )
         hidden_state_vl, hidden_state_awa, hidden_state_exp = hidden_states
+        norm_dtype = self.qwen_expert.model.norm.weight.dtype
+        hidden_state_exp_dtype = hidden_state_exp.dtype
+        hidden_state_exp = hidden_state_exp.to(norm_dtype)
         hidden_state_exp = self.qwen_expert.model.norm(hidden_state_exp)
+        hidden_state_exp = hidden_state_exp.to(hidden_state_exp_dtype)
         
         return hidden_state_vl, hidden_state_awa, hidden_state_exp, None
     
@@ -967,7 +981,11 @@ class PaliGemmaWithExpertModel(PreTrainedModel):
             residual_vl = hidden_states_vl
             
             # print(f"RMSNorm param at layer {layer_idx} is: {layers[0].input_layernorm.weight.size()}")
+            norm_dtype = layers[0].input_layernorm.weight.dtype
+            hidden_states_vl_dtype = hidden_states_vl.dtype
+            hidden_states_vl = hidden_states_vl.to(norm_dtype)
             hidden_states_vl = layers[0].input_layernorm(hidden_states_vl)
+            hidden_states_vl = hidden_states_vl.to(hidden_states_vl_dtype)
             
             hidden_states_vl, self_attn_weights, present_key_value = self.qwen_vl_flow_attn(
                 attn=layers[0].self_attn,
@@ -1027,7 +1045,9 @@ class PaliGemmaWithExpertModel(PreTrainedModel):
             hidden_states_vl = residual_vl + hidden_states_vl
             
             residual_vl = hidden_states_vl
+            hidden_states_vl = hidden_states_vl.to(norm_dtype)
             hidden_states_vl = layers[0].post_attention_layernorm(hidden_states_vl)
+            hidden_states_vl = hidden_states_vl.to(hidden_states_vl_dtype)
             hidden_states_vl = layers[0].mlp(hidden_states_vl)
             hidden_states_vl = residual_vl + hidden_states_vl
         
@@ -1221,8 +1241,11 @@ class PaliGemmaWithExpertModel(PreTrainedModel):
         past_key_value = [key_awa, value_awa]
         
         residual = hidden_states
-        
+        norm_dtype = decoder_layer.input_layernorm.weight.dtype
+        hidden_states_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(norm_dtype)
         hidden_states = decoder_layer.input_layernorm(hidden_states)
+        hidden_states = hidden_states.to(hidden_states_dtype)
         
         hidden_states, self_attn_weights, key_value = self.expert_attention_forward(
             decoder_layer.self_attn,
@@ -1240,7 +1263,9 @@ class PaliGemmaWithExpertModel(PreTrainedModel):
         
         # Fully Connected
         residual = hidden_states
+        hidden_states = hidden_states.to(norm_dtype)
         hidden_states = decoder_layer.post_attention_layernorm(hidden_states)
+        hidden_states = hidden_states.to(hidden_states_dtype)
         hidden_states = decoder_layer.mlp(hidden_states)
         hidden_states = residual + hidden_states
         
@@ -1268,7 +1293,11 @@ class PaliGemmaWithExpertModel(PreTrainedModel):
     ):
         residual = hidden_states
         
+        norm_dtype = decoder_layer.input_layernorm.weight.dtype
+        hidden_states_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(norm_dtype)
         hidden_states = decoder_layer.input_layernorm(hidden_states)
+        hidden_states = hidden_states.to(hidden_states_dtype)
         
         hidden_states, self_attn_weights, key_value = self.expert_attention_forward(
             decoder_layer.self_attn,
@@ -1286,7 +1315,9 @@ class PaliGemmaWithExpertModel(PreTrainedModel):
         
         # Fully Connected
         residual = hidden_states
+        hidden_states = hidden_states.to(norm_dtype)
         hidden_states = decoder_layer.post_attention_layernorm(hidden_states)
+        hidden_states = hidden_states.to(hidden_states_dtype)
         hidden_states = decoder_layer.mlp(hidden_states)
         hidden_states = residual + hidden_states
         

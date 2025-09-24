@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
+import torch
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler
 
@@ -34,8 +34,26 @@ def make_optimizer_and_scheduler(
     Returns:
         tuple[Optimizer, LRScheduler | None]: The couple (Optimizer, Scheduler). Scheduler can be `None`.
     """
-    params = policy.get_optim_params() if cfg.use_policy_training_preset else policy.parameters()
-    params = list(filter(lambda p: p.requires_grad, params))
+    
+    # name, params = policy.get_optim_params() if cfg.use_policy_training_preset else policy.named_parameters()
+    bf16_params = []
+    fp32_params = []
+    bf16_names = []
+    fp32_names = []
+    for name, param in policy.named_parameters():
+        if param.requires_grad:
+            if param.dtype == torch.bfloat16:
+                bf16_params.append(param)
+                bf16_names.append(name)
+            elif param.dtype == torch.float32:
+                fp32_params.append(param)
+                fp32_names.append(name)
+    
+    # bf16_params = list(filter(lambda p: p.requires_grad and p.dtype == torch.bfloat16, named_params.values()))
+    # fp32_params = list(filter(lambda p: p.requires_grad and p.dtype == torch.float32, named_params.values()))
+    # bf16_names = list(filter(lambda p: p.requires_grad and p.dtype == torch.bfloat16, named_params.keys()))
+    # fp32_names = list(filter(lambda p: p.requires_grad and p.dtype == torch.float32, named_params.keys()))
+    params = [{"params": bf16_params, "dtype": torch.bfloat16}, {"params": fp32_params, "dtype": torch.float32}]
     optimizer = cfg.optimizer.build(params)
     lr_scheduler = cfg.scheduler.build(optimizer, cfg.steps) if cfg.scheduler is not None else None
-    return optimizer, lr_scheduler
+    return optimizer, lr_scheduler, bf16_names, fp32_names

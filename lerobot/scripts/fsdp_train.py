@@ -20,6 +20,7 @@ import math
 import glob
 import json
 import functools
+import numpy as np
 from pathlib import Path
 from datetime import datetime
 from pprint import pformat
@@ -196,33 +197,33 @@ def train_step(model, batch, scaler, cfg, sync_flag):
 @parser.wrap()
 def train(cfg: TrainPipelineConfig):
     # 初始化分布式环境
-    world_size = int(os.environ["WORLD_SIZE"])
-    local_rank = int(os.environ["LOCAL_RANK"])
-    world_rank = int(os.environ["RANK"])
-    node_rank = int(os.environ["NODE_RANK"])
-    master_ip = os.environ["MASTER_ADDR"]
-    master_port = os.environ["MASTER_PORT"]
-    master_uri = "tcp://%s:%s" % (master_ip, master_port)
-    rank = world_rank
-    dist.init_process_group(
-        backend="nccl",
-        init_method=master_uri,
-        world_size=world_size,
-        timeout=timedelta(minutes=60),
-        rank=world_rank,
-    )
+    # world_size = int(os.environ["WORLD_SIZE"])
+    # local_rank = int(os.environ["LOCAL_RANK"])
+    # world_rank = int(os.environ["RANK"])
+    # node_rank = int(os.environ["NODE_RANK"])
+    # master_ip = os.environ["MASTER_ADDR"]
+    # master_port = os.environ["MASTER_PORT"]
+    # master_uri = "tcp://%s:%s" % (master_ip, master_port)
+    # rank = world_rank
+    # dist.init_process_group(
+    #     backend="nccl",
+    #     init_method=master_uri,
+    #     world_size=world_size,
+    #     timeout=timedelta(minutes=60),
+    #     rank=world_rank,
+    # )
     
-    # dist.init_process_group(backend="nccl")
-    # rank = dist.get_rank()
-    # world_size = dist.get_world_size()
-    # local_rank = rank
+    dist.init_process_group(backend="nccl")
+    rank = dist.get_rank()
+    world_size = dist.get_world_size()
+    local_rank = rank
     
     torch.cuda.set_device(local_rank)
     
     # 初始化配置
     cfg.validate()
     logger = init_logger(cfg, rank)
-    logger.info(f"DIST INFO: world_size={world_size}, local_rank={local_rank}, world_rank={world_rank}, node_rank={node_rank}, master_uri={master_uri}")
+    # logger.info(f"DIST INFO: world_size={world_size}, local_rank={local_rank}, world_rank={world_rank}, node_rank={node_rank}, master_uri={master_uri}")
     
     if rank == 0:
         logger.info(pformat(cfg.to_dict()))
@@ -312,8 +313,8 @@ def train(cfg: TrainPipelineConfig):
             
     # 设置模型全部参数为BF16
     logger.info("Setting model parameters to BF16...")
-    for params in policy.parameters():
-        params.data = params.data.bfloat16()
+    # for params in policy.parameters():
+    #     params.data = params.data.bfloat16()
         # params.data = params.data.to(dtype=torch.float16)
     # 统计模型可训练参数的参数量
     if rank == 0:
@@ -361,21 +362,67 @@ def train(cfg: TrainPipelineConfig):
     sharding_strategy = ShardingStrategy.HYBRID_SHARD
     # sharding_strategy = ShardingStrategy.FULL_SHARD
     
+    # model = FSDP(
+    #     policy,
+    #     auto_wrap_policy=auto_wrap_policy,
+    #     mixed_precision=mixed_precision,
+    #     sharding_strategy=sharding_strategy,
+    #     device_id=local_rank,
+    #     use_orig_params=True
+    # )
+    ignored_modules = []
+    for name, m in policy.named_modules():
+        if 'norm' in name:
+            ignored_modules.append(m)
+        if 'mask' in name:
+            ignored_modules.append(m)
+    for m in ignored_modules:
+        m.to(local_rank)
     model = FSDP(
         policy,
         auto_wrap_policy=auto_wrap_policy,
         mixed_precision=mixed_precision,
         sharding_strategy=sharding_strategy,
+        ignored_modules=ignored_modules,
         device_id=local_rank,
         use_orig_params=True
     )
     
+    
     # 优化器和学习率调度器
-    optimizer, lr_scheduler = make_optimizer_and_scheduler(cfg, model)
+    optimizer, lr_scheduler, bf16_names, fp32_names = make_optimizer_and_scheduler(cfg, model)
+    param_id_to_name = {id(p): n for n, p in model.named_parameters()}
+    print("=== model.named_parameters() (部分示例) ===")
+    # for n, p in model.named_parameters():
+    #     if "kv_mask" in n:
+    #         print(f"name={n:50} id={id(p):20} requires_grad={p.requires_grad} device={p.device} shape={tuple(p.shape)}")
+
+    print("\n=== optimizer.param_groups ids (部分示例) ===")
+    opt_param_ids = []
+    for i, g in enumerate(optimizer.param_groups):
+        for p in g['params']:
+            opt_param_ids.append(id(p))
+            # 只打印 kv_mask 相关 id 是否出现在 optimizer 内
+            if any("kv_mask" in n for n in param_id_to_name.values()):
+                name = param_id_to_name.get(id(p), None)
+                # if name and "kv_mask" in name:
+                #     print(f"[opt] group {i} contains kv_mask param name={name} id={id(p)}")
     
-    # if rank == 0:
-    #     logger.info(model)
-    
+    unmatched = [pid for pid in param_id_to_name if pid not in opt_param_ids]
+    print(f"\nmodel.named_parameters() 中共有 param id 数量: {len(opt_param_ids)}, 其中没有在 optimizer 中匹配到名字的数量: {len(unmatched)}")
+    if len(unmatched) > 0:
+        print("示例未匹配 id（可能是 flat/替换后的参数）:", unmatched[:5])
+        for pid in unmatched:
+            if 'mask' in param_id_to_name[pid]:
+                in_fp32 = False
+                in_bf16 = False
+                if param_id_to_name[pid] in fp32_names:
+                    in_fp32 = True
+                if param_id_to_name[pid] in bf16_names:
+                    in_bf16 = True
+                if rank == 0:
+                    print(f"示例未匹配 id 对应的参数名: {param_id_to_name[pid]}, 是否在 fp32_names 中: {in_fp32}, 是否在 bf16_names 中: {in_bf16}")
+                
     # 数据加载器
     sampler = DistributedSampler(
         dataset,
@@ -418,7 +465,7 @@ def train(cfg: TrainPipelineConfig):
     # 主训练循环
     if rank == 0:
         logger.info(f"Starting FSDP training on {world_size} devices")
-        logger.info(pformat(cfg.to_dict()))
+        # logger.info(pformat(cfg.to_dict()))
     
     model.train()
     
@@ -499,12 +546,108 @@ def train(cfg: TrainPipelineConfig):
         if sync_flag:
             # logger.info(f"Step {step}/{cfg.steps}")
             torch.cuda.empty_cache()
+            
+            # with FSDP.summon_full_params(model):
+            grad_list = []
+            grad_missing_name = []
+            rank_1_with_grad = []
+            for name, p in policy.named_parameters():
+                # print(name)
+                
+                if "20" in name:
+                # if "10" in name and "k_mask" in name:
+                    # print(name)
+                    if rank == 1:
+                        if p.requires_grad:
+                            if p.grad is not None:
+                                rank_1_with_grad.append(name)
+                                
+                    if rank == 0:
+                        if p.requires_grad:
+                            if p.grad is None:
+                                grad_missing_name.append(name)
+                            else:
+                                grad_list.append(p.grad.abs().mean().item())
+                                if "k_mask" in name:
+                                    logger.info(f"{p}")
+                        # print(name)
+                        # print(p.grad.abs().max().item())
+            if rank == 0:
+                for name in rank_1_with_grad:
+                    if name in grad_missing_name:
+                        grad_missing_name.remove(name)
+                wo_bias_name = [name for name in grad_missing_name if "bias" not in name]
+                grad_missing_name = [name.replace("_fsdp_wrapped_module.", "") for name in wo_bias_name]
+                grad_list = np.asanyarray(grad_list)
+                print(f"Max grad: {grad_list.max():.4g}, Mean grad: {grad_list.mean():.4g}, Mid grad: {np.median(grad_list):.4g}, Min grad: {grad_list.min():.4g}")
+                print(f"Grad missing: {grad_missing_name}")
+                # if "26" in name and "k_mask" in name:
+                #     if rank == 0:
+                #         print("model.paligemma_with_expert.kv_mask.26.k_mask: \n", p)
+                #         print("k_mask.grad max:", p.grad)
+                # if "26" in name and "k_norm" in name and "weight" in name:
+                #     if rank == 0:
+                #         # print("model.paligemma_with_expert.kv_norm.26.k_norm.weight: \n", p)
+                #         print("\n==========================================================\n")
+            # for name, p in model.named_parameters():
+            #     if p.grad is not None:
+            #         print(name, "param", p.dtype, "grad", p.grad.dtype)
+            # # 查看 optimizer state dtype
+            # for p, st in optimizer.state.items():
+            #     if "exp_avg" in st:
+            #         print("param dtype", p.dtype, "exp_avg dtype", st["exp_avg"].dtype)
+            #         break
             optim_start = time.perf_counter()
+            
+            for name, p in model.named_parameters():
+                if p.grad is None:
+                    continue
+                if p.dtype == torch.float32:
+                    p.grad = p.grad.to(torch.float32)
+                else:
+                    p.grad = p.grad.to(torch.bfloat16)
+                # lowname = name.lower()
+                # if 'norm' in lowname or 'mask' in lowname:
+                #     if p.grad.dtype != torch.float32:
+                #         p.grad = p.grad.to(torch.float32)
             if scaler is not None:
                 scaler.step(optimizer)
                 scaler.update()
             else:
                 optimizer.step()
+                
+            param_to_name = {param: name for name, param in model.named_parameters()}
+            # for k, v in param_to_name.items():
+            #     if "kv_mask" in v:
+            #         v = v.replace("_fsdp_wrapped_module.", "_f.")
+            #         v = v.replace("_f.model._f.paligemma_with_expert._f.", "")
+            #         print(f"{v:<60} {'N/A':<20} {'N/A':<20}")
+                    
+            # print(f"{'Parameter Name':<60} {'Momentum (exp_avg) Shape':<20} {'Variance (exp_avg_sq) Shape':<20}")
+            if rank == 0:
+                print("="*100)
+            
+            for group in optimizer.param_groups:
+                for param in group['params']:
+                    if param.grad is not None:
+                        if param in optimizer.state:
+                            state = optimizer.state[param]
+                            # 获取参数名
+                            param_name = param_to_name.get(param, "Unnamed Parameter")
+                            momentum = state.get('exp_avg', None)
+                            variance = state.get('exp_avg_sq', None)
+                            momentum_shape = momentum.shape if momentum is not None else "N/A"
+                            variance_shape = variance.shape if variance is not None else "N/A"
+                            param_name = param_name.replace("_fsdp_wrapped_module.", "_f.")
+                            if "kv_mask" in param_name:
+                                param_name = param_name.replace("_f.model._f.paligemma_with_expert._f.", "")
+                                # print(f"{param_name:<60} {str(momentum_shape):<20} {str(variance_shape):<20}")
+                        else:
+                            param_name = param_to_name.get(param, "Unnamed Parameter")
+                            param_name = param_name.replace("_fsdp_wrapped_module.", "_f.")
+                            # if "kv_mask" in param_name:
+                                # print(f"{param_name:<60} {'State not found':<20} {'State not found':<20}")
+
             optimizer.zero_grad(set_to_none=True)
             optim_time = time.perf_counter() - optim_start
         

@@ -3,4 +3,11 @@ python lerobot/scripts/halo_service.py \
     --dataset.repo_id="whatever" \
     --dataset.processor="/datassd_1T/qwen25vl/Qwen2.5-VL-7B-Instruct/" \
     --dataset.parent_dir="/data_16T/lerobot_openx/" \
-    --data_mix="pizza"
+    --data_mix="pizza_single"
+    
+    # --dataset.root="/data_16T/lerobot_openx/" \
+    # --data_mix="pizza"
+    # --dataset.parent_dir="/data_16T/lerobot_openx/" \
+    # --dataset.parent_dir="/data_16T/lerobot_openx/" \
+    # --data_mix="pizza_single"
+    

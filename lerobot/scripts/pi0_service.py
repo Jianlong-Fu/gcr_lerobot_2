@@ -17,7 +17,7 @@ from lerobot.configs import parser
 from lerobot.configs.train import TrainPipelineConfig
 from lerobot.common.policies.factory import make_policy
 from lerobot.common.datasets.transforms import ImageTransforms
-from lerobot.common.datasets.lerobot_dataset import MultiDatasetforDistTraining
+from lerobot.common.datasets.lerobot_dataset import MultiSameDataset
 
 def pil2tensor(pil_image):
     np_pil_image = np.array(pil_image).astype(np.float32)
@@ -65,6 +65,7 @@ def decode_b64_image(b64image):
     str_decode = base64.b64decode(b64image)
     np_image = np.frombuffer(str_decode, np.uint8)
     image_cv2 = cv2.imdecode(np_image, cv2.IMREAD_COLOR)
+    image_cv2 = cv2.cvtColor(image_cv2, cv2.COLOR_BGR2RGB)
     # Get h,w of image
     # h, w, _ = image_cv2.shape
     # #Crop the image retain the mid area to be a square
@@ -94,9 +95,10 @@ def predict():
     global device, processor, pi0, state_mean, state_std, action_mean, action_std
     
     resp = request.get_json()
-    
+    fix_state = np.zeros((8))
     item = {
-        "observation.state": torch.tensor(resp["state"]),
+        # "observation.state": torch.tensor(resp["state"]),
+        "observation.state": torch.tensor(fix_state),
         "task": [resp["task"]],
         "exp_id": resp["exp_id"]
     }
@@ -106,27 +108,36 @@ def predict():
     for img in images:
         image_k4a_1 = decode_b64_image(img)
         image_k4a_1 = image_k4a_1[40:720,200:880,:] 
-        image_k4a_1 = Image.fromarray(image_k4a_1).resize((224,224))
+        image_k4a_1 = Image.fromarray(image_k4a_1).resize((448, 448))
+        image_k4a_1.save("/home/v-wenhuitan/pi_0_open/media/obs/k4a.jpg")
         item["primary"].append(image_k4a_1)
         
     item["observation.images.primary"] = item["primary"][-1]
     item["observation.images.primary"] = pil2tensor(item["observation.images.primary"])
     
-    item["observation.images.secondary"] = decode_b64_image(resp['images'][1])
-    item["observation.images.secondary"] = Image.fromarray(item["observation.images.secondary"]).resize((224,224))
-    item["observation.images.secondary"] = pil2tensor(item["observation.images.secondary"])
+    # sample_image = np.ones((224,224,3), dtype=np.uint8)
+    # sample_image = sample_image * -1
+    # sample_image = Image.fromarray(sample_image)
     
-    item["observation.images.wrist"] = decode_b64_image(resp['images'][2])
-    wrist_shape = item["observation.images.wrist"].shape
-    if wrist_shape[0] > wrist_shape[1]:
-        # center crop
-        item["observation.images.wrist"] = item["observation.images.wrist"][:,wrist_shape[1]//2-wrist_shape[0]//2:wrist_shape[1]//2+wrist_shape[0]//2,:]
-    else:
-        item["observation.images.wrist"] = item["observation.images.wrist"][wrist_shape[0]//2-wrist_shape[1]//2:wrist_shape[0]//2+wrist_shape[1]//2,:,:]
-    item["observation.images.wrist"] = Image.fromarray(item["observation.images.wrist"]).resize((224,224))
-    item["observation.images.wrist"] = pil2tensor(item["observation.images.wrist"])
+    # item["observation.images.secondary"] = decode_b64_image(resp['images'][1])
+    # item["observation.images.secondary"] = Image.fromarray(item["observation.images.secondary"]).resize((224,224))
+    # item["observation.images.secondary"] = sample_image
+    # item["observation.images.secondary"].save("/home/v-wenhuitan/pi_0_open/media/obs/real_1.jpg")
+    # item["observation.images.secondary"] = pil2tensor(item["observation.images.secondary"])
     
-    item["observation.state"] = (item["observation.state"] - state_mean) / (state_std + 1e-8)
+    # item["observation.images.wrist"] = decode_b64_image(resp['images'][2])
+    # wrist_shape = item["observation.images.wrist"].shape
+    # if wrist_shape[0] > wrist_shape[1]:
+    #     # center crop
+    #     item["observation.images.wrist"] = item["observation.images.wrist"][wrist_shape[0]//2 - wrist_shape[1]//2:wrist_shape[0]//2 + wrist_shape[1]//2,:,:]
+    # else:
+    #     item["observation.images.wrist"] = item["observation.images.wrist"][:,wrist_shape[1]//2-wrist_shape[0]//2:wrist_shape[1]//2+wrist_shape[0]//2,:]
+    # item["observation.images.wrist"] = Image.fromarray(item["observation.images.wrist"]).resize((224,224))
+    # item["observation.images.wrist"] = sample_image
+    # item["observation.images.wrist"].save("/home/v-wenhuitan/pi_0_open/media/obs/real_2.jpg")
+    # item["observation.images.wrist"] = pil2tensor(item["observation.images.wrist"])
+    
+    # item["observation.state"] = (item["observation.state"] - state_mean) / (state_std + 1e-8)
     item["observation.state"] = item["observation.state"].unsqueeze(0).to(dtype=torch.bfloat16)
     
     # input = prepare_input(item, processor)
@@ -139,8 +150,8 @@ def predict():
     
     actions = pi0.infer(item, noise=None).tolist() # 1 * 50 *32
     # actions = actions[0] # 50 * 32
-    actions = np.array([row[:14] for row in actions[0]]) # 50 * 14 eef pose
-    actions = (actions * (action_std.numpy() + 1e-8)) + action_mean.numpy()
+    actions = np.array([row[:7] for row in actions[0]]) # 50 * 14 eef pose
+    # actions = (actions * (action_std.numpy() + 1e-8)) + action_mean.numpy()
     # actions = [row[6:14] for row in actions[0]] # 50 * 7 joint
     print(actions[:5])
     
@@ -153,24 +164,27 @@ def predict():
 @parser.wrap()
 def start_service(cfg: TrainPipelineConfig):
     
-    path_2_load = "/data_16T/deepseek/pi0pizza/mp_rank_00_model_states.pt"
+    # path_2_load = "/data_16T/deepseek/pi0pizza/mp_rank_00_model_states.pt"
+    path_2_load = "/data_16T/deepseek/pi0pizza/191/mp_rank_00_model_states.pt"
+    
     cfg.policy.qwen_path = "/datassd_1T/qwen25vl/Qwen2.5-VL-7B-Instruct/"
     
     image_transforms = (ImageTransforms(cfg.dataset.image_transforms))
     seed = cfg.seed
-    dataset = MultiDatasetforDistTraining(
+    dataset = MultiSameDataset(
         cfg=cfg, 
         image_transforms=image_transforms,
-        seed=seed,
-        data_mix=cfg.data_mix,
-        vla2root_json="pizza.json",
+        # seed=seed,
+        # data_mix=cfg.data_mix,
+        # vla2root_json="pizza.json",
         # vla2root_json="vla2root_bak_single.json"
     )
     action_mean = dataset.stats["action"]["mean"][:14]
     dataset.stats["action"]["mean"] = dataset.stats["action"]["mean"][:14]
     action_std = dataset.stats["action"]["std"][:14]
     dataset.stats["action"]["std"] = dataset.stats["action"]["std"][:14]
-    print(action_mean, action_std)
+    print("Action: ", action_mean, action_std)
+    # print(action_mean, action_std)
     # action_mean[6] = 0.0
     # action_std[6] = 1.0
     
@@ -178,8 +192,11 @@ def start_service(cfg: TrainPipelineConfig):
     dataset.stats["observation.state"]["mean"] = dataset.stats["observation.state"]["mean"][:15]
     state_std = dataset.stats["observation.state"]["std"][:15]
     dataset.stats["observation.state"]["std"] = dataset.stats["observation.state"]["std"][:15]
-    
+    print("State: ", state_mean, state_std)
     # processor = dataset.processor
+    dataset.meta.stats['observation.state']['mean'] = np.zeros_like(dataset.meta.stats['observation.state']['mean'])
+    dataset.meta.stats['observation.state']['std'] = np.ones_like(dataset.meta.stats['observation.state']['std'])
+    # print("meta stats: ", dataset.meta.stats)
     
     policy = make_policy(
         cfg=cfg.policy,
@@ -192,12 +209,24 @@ def start_service(cfg: TrainPipelineConfig):
         model_state_dict = torch.load(path_2_load, map_location="cpu")
         key_to_remove = []
         for k, v in model_state_dict.items():
+            # print(k)
+            if k == "unnormalize_outputs.buffer_action.mean":
+                print(k, v)
+                print(action_mean, "\n")
+            if k == "unnormalize_outputs.buffer_action.std":
+                print(k, v)
+                print(action_std, "\n")
+            if k == "normalize_inputs.buffer_observation_state.mean":
+                print(k, v)
+            if k == "normalize_inputs.buffer_observation_state.std":
+                print(k, v)
             if "awa_model.lm_head" in k or "qwen_expert.lm_head" in k:
                 key_to_remove.append(k)
         for k in key_to_remove:
             del model_state_dict[k]
             
         policy.load_state_dict(model_state_dict["module"], strict=True)
+        # policy.load_state_dict(model_state_dict, strict=True)
         del model_state_dict
         del key_to_remove
     
@@ -206,10 +235,10 @@ def start_service(cfg: TrainPipelineConfig):
         
     pi0 = policy
     pi0.eval()
+    device = "cuda:1"
 
-    pi0.to(device="cuda:0")
+    pi0.to(device=device)
     
-    device = "cuda:0"
     
     return device, pi0, state_mean, state_std, action_mean, action_std
 

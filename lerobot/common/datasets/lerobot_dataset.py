@@ -49,7 +49,7 @@ from lerobot.common.datasets.oxe_configs import OXE_DATASET_CONFIGS
 from lerobot.common.datasets.mixtures import OXE_NAMED_MIXTURES
 from lerobot.common.datasets.utils import cycle
 # from lerobot.common.datasets.factory import resolve_delta_timestamps
-from lerobot.common.datasets.compute_stats import aggregate_stats, compute_episode_stats, aggregate_multi_stats
+from lerobot.common.datasets.compute_stats import aggregate_stats, compute_episode_stats, aggregate_multi_stats, aggregate_same_stats
 from lerobot.common.datasets.transforms import ImageTransforms
 from lerobot.common.datasets.image_writer import AsyncImageWriter, write_image
 from lerobot.common.datasets.utils import (
@@ -1877,6 +1877,101 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             return self.dataset.features
         else:
             return get_hf_features_from_features(self.features)
+        
+class MultiSameDataset(torch.utils.data.Dataset):
+    def __init__(self, cfg, image_transforms, wrist_image_transforms = None):
+        super().__init__()
+        self.episodes = None
+        parent_dir = cfg.dataset.root
+        # parent_dir = "/mnt/wangxiaofa/robot_dataset/lerobot-format/"
+        # parent_dir = "/Data/lerobot_data/real_world"
+        self.datasets = []
+        meta_features = None
+        episode_count = 0
+        dataset_names = []
+        
+        mixture_spec = OXE_NAMED_MIXTURES[cfg.data_mix]
+        is_pizza = False
+        for d_name, d_weight in mixture_spec:
+            if d_name in dataset_names:
+                print(f"Skipping Duplicate Dataset: `{(d_name, d_weight)}`")
+                continue
+            dataset_names.append(d_name)
+            if "pizza" in d_name:
+                is_pizza = True
+        
+        print(f"Dataset names:{dataset_names}")
+        
+        for d_name in dataset_names:
+            if d_name == "pizza_single":
+                d_name = "pizza_v9_task_19_sep1"
+            data_root = os.path.join(parent_dir, d_name)
+            repo_id = f"bulldog-{d_name}" # any
+            ds_meta = LeRobotDatasetMetadata(repo_id, root=data_root)
+            if meta_features == None:
+                meta_features = ds_meta.features
+            delta_timestamps = resolve_delta_timestamps(cfg.policy, ds_meta)
+            dataset = LeRobotDataset(
+                repo_id, 
+                root=data_root,
+                delta_timestamps=delta_timestamps,
+                image_transforms=image_transforms,
+                video_backend=cfg.dataset.video_backend,
+                revision=cfg.dataset.revision,
+            )
+            episode_this_dataset = dataset.num_episodes
+            episode_count += episode_this_dataset
+            self.datasets.append(dataset)
+
+        self.dataset = ConcatDataset(self.datasets)
+        self.num_episodes = episode_count
+        self.stats = aggregate_same_stats(self.datasets)
+        # if is_pizza:
+        #     self.stats["action"]["mean"][6:] = 0
+        #     self.stats["action"]["std"][6:] = 1
+        #     self.stats["observation.state"]["mean"][8:] = 0
+        #     self.stats["observation.state"]["std"][8:] = 1
+        # print(self.stats, meta_features)
+        self.meta = LeRobotDatasetMetadata.create_with_stats_feats(stats=self.stats, features=meta_features) # Note: I added a class function
+        self.meta.repo_id = "Any"
+    
+    def __len__(self):
+        return len(self.dataset)
+        # return self.dataset_len
+    
+    @property
+    def num_frames(self) -> int:
+        """Number of frames in selected episodes."""
+        return len(self.dataset) if self.dataset is not None else self.meta.total_frames
+        # return self.dataset_len if self.dataset_len is not None else self.meta.total_frames
+
+    @property
+    def features(self) -> dict[str, dict]:
+        return self.meta.features
+
+    @property
+    def hf_features(self) -> datasets.Features:
+        """Features of the hf_dataset."""
+        if self.dataset is not None:
+            return self.datasets[0].features
+        else:
+            return get_hf_features_from_features(self.features)
+    
+    def __getitem__(self, index):
+        item = self.dataset[index]
+        # 50 14, 15
+        # print(item["action"].shape, item["observation.state"].shape)
+        
+        # item["action"][:, 6] = torch.where(
+        #     item["action"][:, 6] < 0.5,
+        #     torch.tensor(-1.0, device=item["action"].device),
+        #     torch.tensor(1.0, device=item["action"].device)
+        # )
+        # # print(item["action"][:, 6])
+        # item["action"][:, 7:] = 0
+        # item["observation.state"][8:] = 0
+        return item 
+
     
 def resolve_delta_timestamps(
     cfg: PreTrainedConfig, ds_meta: LeRobotDatasetMetadata

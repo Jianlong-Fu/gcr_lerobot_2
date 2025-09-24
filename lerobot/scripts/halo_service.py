@@ -304,9 +304,11 @@ def prepare_input(item, processor):
     item["observation.state"] = pad_vector(item["observation.state"], 32)
     item["observation.state"] = (item["observation.state"] - item["mean"]) / (item["std"] + 1e-8)
     state = torch.zeros_like(item["observation.state"])
+    state_prefix = torch.ones_like(item["observation.state"])
     state_device = item["observation.state"].device
     state_dtype = item["observation.state"].dtype
-    state[:8] = item["observation.state"][:8]
+    # state[:8] = item["observation.state"][:8]
+    state[:8] = state_prefix[:8]
     state = state.to(device = state_device, dtype = state_dtype)
     item["observation.state"] = state
     
@@ -374,10 +376,12 @@ def predict():
         # save image for visulization
         image_k4a_1.save("/home/v-wenhuitan/pi_0_open/media/obs/k4a.jpg")
         item["primary"].append(image_k4a_1)
+    sample_image_array = np.ones((224, 224, 3), dtype=np.uint8)
     item["secondary"] = decode_b64_image(resp['images'][1])
     # item["secondary"] = item["secondary"][40:720,200:880,:]
     item["secondary"] = Image.fromarray(item["secondary"]).resize((224,224))
     item["secondary"].save("/home/v-wenhuitan/pi_0_open/media/obs/real_1.jpg")
+    item['secondary'] = Image.fromarray(sample_image_array)
     
     item["wrist"] = decode_b64_image(resp['images'][2])
     wrist_shape = item["wrist"].shape
@@ -391,7 +395,7 @@ def predict():
     
     item["wrist"] = Image.fromarray(item["wrist"]).resize((224,224))
     item["wrist"].save("/home/v-wenhuitan/pi_0_open/media/obs/real_2.jpg")
-    
+    item['wrist'] = Image.fromarray(sample_image_array)
     
     input = prepare_input(item, processor)
     input["action.mean"] = action_mean
@@ -399,9 +403,13 @@ def predict():
     
     actions = halo.infer(input).tolist() # 1 * 50 *32
     # actions = actions[0] # 50 * 32
-    actions = [row[:14] for row in actions[0]] # 50 * 7 eef pose
+    actions = [row[:7] for row in actions[0]] # 50 * 7 eef pose
     # actions = [row[6:14] for row in actions[0]] # 50 * 7 joint
-    print(actions[:5])
+    for i in range(8):
+        row = actions[i]
+        print(f" ".join(f"{num:4f}" for num in row))
+        # print(actions[i])
+    # print()
     
     response_dict = {
         "act": actions
@@ -423,8 +431,10 @@ def exp_predict():
     
     resp = request.get_json()
     
+    resp["state"] = torch.tensor(resp["state"])
+    
     item = {
-        "observation.state": torch.tensor(resp["state"]),
+        "observation.state": torch.ones_like(resp["state"]).to(dtype=torch.float32),
         "mean": state_mean,
         "std": state_std,
         "task": resp["task"],
@@ -509,9 +519,9 @@ def modelbench():
 @parser.wrap()
 def start_service(cfg: TrainPipelineConfig):
     
-    path_2_load = "/data_16T/deepseek/halo/step2000.pt"
+    path_2_load = "/data_16T/deepseek/qwen_flow/161/step10000.pt"
     cfg.policy.qwen_path = "/datassd_1T/qwen25vl/Qwen2.5-VL-7B-Instruct/"
-    device = "cuda:0"
+    device = "cuda:1"
     
     model_bench = False
     
@@ -527,7 +537,7 @@ def start_service(cfg: TrainPipelineConfig):
     )
     action_mean = dataset.stats["action"]["mean"]
     action_std = dataset.stats["action"]["std"]
-    print(action_mean, action_std)
+    print("Action Meta: \n", action_mean, action_std)
     # action_mean[6] = 0.0
     # action_std[6] = 1.0
     

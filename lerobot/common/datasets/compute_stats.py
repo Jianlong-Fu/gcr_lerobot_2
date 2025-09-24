@@ -281,3 +281,71 @@ def aggregate_multi_stats(ls_datasets: list, data_names: list, max_dim: int) -> 
                 stats[data_key]["max"][start_dim:start_dim+d_len] = agi_d.meta.stats[data_key]["max"][start_dim:start_dim+d_len]
                 stats[data_key]["min"][start_dim:start_dim+d_len] = agi_d.meta.stats[data_key]["min"][start_dim:start_dim+d_len]
     return stats
+
+def aggregate_same_stats(ls_datasets) -> dict[str, torch.Tensor]:
+    """Aggregate stats of multiple LeRobot datasets into one set of stats without recomputing from scratch.
+
+    The final stats will have the union of all data keys from each of the datasets.
+
+    The final stats will have the union of all data keys from each of the datasets. For instance:
+    - new_max = max(max_dataset_0, max_dataset_1, ...)
+    - new_min = min(min_dataset_0, min_dataset_1, ...)
+    - new_mean = (mean of all data)
+    - new_std = (std of all data)
+    """
+    data_keys = set()
+    for dataset in ls_datasets:
+        data_keys.update(dataset.meta.stats.keys()) # action, observation.state, ...
+    stats = {k: {} for k in data_keys}
+    
+    for data_key in data_keys:
+        for stat_key in ["mean", "std", "min", "max"]:
+            for ds in ls_datasets:
+                if data_key in ds.meta.stats:
+                    if isinstance(ds.meta.stats[data_key][stat_key], np.ndarray):
+                            ds.meta.stats[data_key][stat_key] = torch.from_numpy(ds.meta.stats[data_key][stat_key])
+    
+    for data_key in data_keys:
+        for stat_key in ["min", "max"]:
+            # compute `max(dataset_0["max"], dataset_1["max"], ...)`
+            stats[data_key][stat_key] = einops.reduce(
+                torch.stack(
+                    [ds.meta.stats[data_key][stat_key] for ds in ls_datasets if data_key in ds.meta.stats],
+                    dim=0,
+                ),
+                "n ... -> ...",
+                stat_key,
+            ).numpy()
+        total_samples = sum(d.num_frames for d in ls_datasets if data_key in d.meta.stats)
+        # Compute the "sum" statistic by multiplying each mean by the number of samples in the respective
+        # dataset, then divide by total_samples to get the overall "mean".
+        # NOTE: the brackets around (d.num_frames / total_samples) are needed tor minimize the risk of
+        # numerical overflow!
+        stats[data_key]["mean"] = sum(
+            d.meta.stats[data_key]["mean"] * (d.num_frames / total_samples)
+            for d in ls_datasets
+            if data_key in d.meta.stats
+        )
+        # The derivation for standard deviation is a little more involved but is much in the same spirit as
+        # the computation of the mean.
+        # Given two sets of data where the statistics are known:
+        # σ_combined = sqrt[ (n1 * (σ1^2 + d1^2) + n2 * (σ2^2 + d2^2)) / (n1 + n2) ]
+        # where d1 = μ1 - μ_combined, d2 = μ2 - μ_combined
+        # NOTE: the brackets around (d.num_frames / total_samples) are needed tor minimize the risk of
+        # numerical overflow!
+        stats[data_key]["std"] = torch.sqrt(
+            sum(
+                (
+                    d.meta.stats[data_key]["std"] ** 2
+                    + (d.meta.stats[data_key]["mean"] - stats[data_key]["mean"]) ** 2
+                )
+                * (d.num_frames / total_samples)
+                for d in ls_datasets
+                if data_key in d.meta.stats
+            )
+        ).numpy()
+        stats[data_key]["mean"] = stats[data_key]["mean"].numpy()
+    
+    
+    
+    return stats

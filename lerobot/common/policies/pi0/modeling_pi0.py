@@ -269,7 +269,7 @@ class PI0Policy(PreTrainedPolicy):
     @torch.no_grad
     def infer(self, batch, noise):
         self.eval()
-        # batch = self.normalize_inputs(batch)
+        batch = self.normalize_inputs(batch)
         
         images, img_masks = self.prepare_images(batch)
         state = self.prepare_state(batch)
@@ -282,7 +282,7 @@ class PI0Policy(PreTrainedPolicy):
         original_action_dim = self.config.action_feature.shape[0]
         actions = actions[:, :, :original_action_dim]
 
-        # actions = self.unnormalize_outputs({"action": actions})["action"]
+        actions = self.unnormalize_outputs({"action": actions})["action"]
         
         return actions.cpu()
 

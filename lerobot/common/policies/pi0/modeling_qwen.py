@@ -58,6 +58,7 @@ import torch
 import torch.nn.functional as F  # noqa: N812
 from torch import Tensor, nn
 from transformers import AutoTokenizer, AutoProcessor
+from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import Qwen2RMSNorm
 
 from qwen_vl_utils import process_vision_info
 from PIL import Image
@@ -68,6 +69,7 @@ from lerobot.common.policies.pi0.configuration_qwen import QwenConfig
 from lerobot.common.policies.pi0.qwen_with_expert import (
     PaliGemmaWithExpertConfig,
     PaliGemmaWithExpertModel,
+    KvLearnableMask
 )
 from lerobot.common.policies.pretrained import PreTrainedPolicy
 from lerobot.common.utils.utils import get_safe_dtype
@@ -251,6 +253,7 @@ class QwenPolicy(PreTrainedPolicy):
         self.processor.tokenizer.padding_side = "left"
         
         self.dtype = torch.bfloat16
+        self.norm_dtype = torch.float32
 
         self.reset()
         if config.train_from_scratch:
@@ -333,7 +336,10 @@ class QwenPolicy(PreTrainedPolicy):
         std = batch["action.std"]
         
         state = self.prepare_state(batch)
+        state = torch.ones_like(state)
         state = self.convert_to_dtype(state)
+        
+        print(f"state: {state.shape}, inputids: {input_ids.shape}")
         
         actions = self.model.sample_actions(input_ids, attention_mask, pixel_values, image_grid_thw, pixel_values_videos, video_grid_thw, second_per_grid_ts, state)
         actions = actions.cpu()
@@ -664,6 +670,7 @@ class QwenFlowMatching(nn.Module):
         self.config = config
         
         self.dtype = torch.bfloat16
+        self.norm_dtype = torch.float32
 
         paligemma_with_export_config = PaliGemmaWithExpertConfig(
             freeze_vision_encoder=self.config.freeze_vision_encoder,
