@@ -878,15 +878,15 @@ class QwenFlowMatching(nn.Module):
     
     def compute_loss(self, label, pred):
         gripper_dim = [6, 13]
-        action_wo_gripper = torch.concat(label[:, :, :gripper_dim[0]], label[:, :, gripper_dim[0]+1:gripper_dim[1]], label[:, :, gripper_dim[1]+1:], 2)
-        pred_wo_gripper = torch.concat(pred[:, :, :gripper_dim[0]], pred[:, :, gripper_dim[0]+1:gripper_dim[1]], pred[:, :, gripper_dim[1]+1:], 2)
-        action_gripper = torch.concat(label[:, :, gripper_dim[0]:gripper_dim[0]+1], label[:, :, gripper_dim[1]:gripper_dim[1]+1], 2)
-        pred_gripper = torch.concat(pred[:, :, gripper_dim[0]:gripper_dim[0]+1], pred[:, :, gripper_dim[1]:gripper_dim[1]+1], 2)
+        action_wo_gripper = torch.concat([label[:, :, :gripper_dim[0]], label[:, :, gripper_dim[0]+1:gripper_dim[1]], label[:, :, gripper_dim[1]+1:]], 2)
+        pred_wo_gripper = torch.concat([pred[:, :, :gripper_dim[0]], pred[:, :, gripper_dim[0]+1:gripper_dim[1]], pred[:, :, gripper_dim[1]+1:]], 2)
+        action_gripper = torch.concat([label[:, :, gripper_dim[0]:gripper_dim[0]+1], label[:, :, gripper_dim[1]:gripper_dim[1]+1]], 2)
+        pred_gripper = torch.concat([pred[:, :, gripper_dim[0]:gripper_dim[0]+1], pred[:, :, gripper_dim[1]:gripper_dim[1]+1]], 2)
         
         diffu_loss = F.mse_loss(pred_wo_gripper, action_wo_gripper, reduction="none")
         gripper_loss = nn.BCEWithLogitsLoss(reduction="none")(pred_gripper, action_gripper)
         
-        losses = diffu_loss + gripper_loss
+        losses = torch.cat([diffu_loss, gripper_loss], dim=2)
         
         return losses
 
