@@ -875,6 +875,20 @@ class QwenFlowMatching(nn.Module):
         att_masks = att_masks[None, :].expand(bsize, len(att_masks))
 
         return state_emb, embs, pad_masks, att_masks
+    
+    def compute_loss(self, label, pred):
+        gripper_dim = [6, 13]
+        action_wo_gripper = torch.concat(label[:, :, :gripper_dim[0]], label[:, :, gripper_dim[0]+1:gripper_dim[1]], label[:, :, gripper_dim[1]+1:], 2)
+        pred_wo_gripper = torch.concat(pred[:, :, :gripper_dim[0]], pred[:, :, gripper_dim[0]+1:gripper_dim[1]], pred[:, :, gripper_dim[1]+1:], 2)
+        action_gripper = torch.concat(label[:, :, gripper_dim[0]:gripper_dim[0]+1], label[:, :, gripper_dim[1]:gripper_dim[1]+1], 2)
+        pred_gripper = torch.concat(pred[:, :, gripper_dim[0]:gripper_dim[0]+1], pred[:, :, gripper_dim[1]:gripper_dim[1]+1], 2)
+        
+        diffu_loss = F.mse_loss(pred_wo_gripper, action_wo_gripper, reduction="none")
+        gripper_loss = nn.BCEWithLogitsLoss(reduction="none")(pred_gripper, action_gripper)
+        
+        losses = diffu_loss + gripper_loss
+        
+        return losses
 
     def forward(
         self, input_ids, attention_mask, pixel_values, image_grid_thw, pixel_values_videos, video_grid_thw, second_per_grid_ts, state, actions, noise=None, time=None
@@ -920,8 +934,10 @@ class QwenFlowMatching(nn.Module):
         # suffix_out = suffix_out.to(dtype=torch.float32)
         suffix_out = suffix_out.to(dtype=self.dtype)
         v_t = self.action_out_proj(suffix_out)
-
-        losses = F.mse_loss(u_t, v_t, reduction="none")
+        
+        pred = noise - v_t # B x chunk x action_dim
+        losses = self.compute_loss(label = actions, pred = pred)
+        # losses = F.mse_loss(u_t, v_t, reduction="none")
         return losses
     
     def sample_actions(
