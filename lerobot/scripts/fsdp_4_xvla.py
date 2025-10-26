@@ -440,7 +440,7 @@ def train(cfg: TrainPipelineConfig):
         batch_size=cfg.batch_size,
         sampler=sampler,
         num_workers=8,
-        pin_memory=True,
+        pin_memory=False,
     )
     
     # 混合精度scaler

@@ -144,7 +144,7 @@ torchrun \
     --output_dir="$FIXED_OUTPUT_DIR" \
     --dataset.repo_id="whatever" \
     --dataset.image_transforms.enable=$IMAGE_AUG \
-    --batch_size=24 \
+    --batch_size=16 \
     --log_freq=100 \
     --save_freq=$SAVE_FREQ \
     --gradient_accumulation_steps=$GRADIENT_ACCUMULATION_STEPS \
