@@ -137,6 +137,7 @@ torchrun \
     --master_port=$MASTER_PORT \
     lerobot/scripts/fsdp_4_xvla.py \
     --policy.type="xvla" \
+    --policy.encoder_name="/mnt/wangxiaofa/utils/xvla_comp/Florence-2-large/" \
     --output_dir="$FIXED_OUTPUT_DIR" \
     --dataset.repo_id="whatever" \
     --dataset.image_transforms.enable=$IMAGE_AUG \
