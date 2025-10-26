@@ -9,6 +9,7 @@ NPROC_PER_NODE=2
 JOB_NAME=""
 JOB_TYPE="pretrain"
 DATA_MIX="oxe_magic_soup_plus"
+BATCH_SIZE=32
 OPTIMIZER_LR=2.5e-5
 OPTIMIZER_DECAY_LR=2.5e-6
 OPTIMIZER_WEIGHT_DECAY=1e-2
@@ -61,6 +62,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --save_freq)
             SAVE_FREQ="$2"
+            shift 2
+            ;;
+        --batch_size)
+            BATCH_SIZE="$2"
             shift 2
             ;;
         --optimizer_lr)
@@ -144,7 +149,7 @@ torchrun \
     --output_dir="$FIXED_OUTPUT_DIR" \
     --dataset.repo_id="whatever" \
     --dataset.image_transforms.enable=$IMAGE_AUG \
-    --batch_size=32 \
+    --batch_size=$BATCH_SIZE \
     --log_freq=100 \
     --save_freq=$SAVE_FREQ \
     --gradient_accumulation_steps=$GRADIENT_ACCUMULATION_STEPS \
