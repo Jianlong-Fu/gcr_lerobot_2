@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Env variables
+export CUDA_LAUNCH_BLOCKING=1
+
 # 默认参数值
 NNODES=1
 NPROC_PER_NODE=2
