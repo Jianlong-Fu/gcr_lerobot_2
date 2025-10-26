@@ -11,6 +11,36 @@ from transformers import AutoProcessor
 from torchvision import transforms
 from torchvision.transforms import InterpolationMode
 
+DATA_DOMAIN_ID = {
+    "Bridge": 0,
+    "RT1": 1,
+    "Calvin": 2,
+    "libero": 3,
+    "widowx-air": 4,
+    "AIR-AGILEX-HQ": 5,
+    "robotwin2_abs_ee": 6,
+    "robotwin2_clean": 6,
+    "robocasa-human": 7,
+    "VLABench": 8,
+    "AGIBOT-challenge": 9,
+    "AIR-AGILEX": 10,
+    "AIRBOT": 18,
+    
+    "cup_full_plus": 19,
+    "cup_25_plus": 20,
+    "cup_7_plus": 21,
+    "cup_100_plus": 22,
+        
+    # pretraining
+    "robomind-franka": 11,
+    "robomind-ur": 12,
+    "Droid-Left": 13,
+    "Droid-Right": 14,
+    "AGIBOT": 15,
+    "robomind-agilex": 16,
+    "robomind-franka-dual": 17,
+}
+
 def _ensure_indices_valid(D: int, idx: Iterable[int], name: str) -> None:
     bad = [i for i in idx if i < 0 or i >= D]
     if bad:
@@ -633,33 +663,6 @@ def find_domain_id(domain_name):
         return DATA_DOMAIN_ID[domain_name]
     else:
         return 30
-        
-DATA_DOMAIN_ID = {
-    "Bridge": 0,
-    "RT1": 1,
-    "Calvin": 2,
-    "libero": 3,
-    "widowx-air": 4,
-    "AIR-AGILEX-HQ": 5,
-    "robotwin2_abs_ee": 6,
-    "robotwin2_clean": 6,
-    "robocasa-human": 7,
-    "VLABench": 8,
-    "AGIBOT-challenge": 9,
-    "AIR-AGILEX": 10,
-    "AIRBOT": 18,
-    
-    "cup_full_plus": 19,
-        
-    # pretraining
-    "robomind-franka": 11,
-    "robomind-ur": 12,
-    "Droid-Left": 13,
-    "Droid-Right": 14,
-    "AGIBOT": 15,
-    "robomind-agilex": 16,
-    "robomind-franka-dual": 17,
-}
 
 # -----------------------
 # Base Utils
