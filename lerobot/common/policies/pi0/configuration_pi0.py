@@ -13,7 +13,7 @@ from lerobot.configs.types import FeatureType, NormalizationMode, PolicyFeature
 class PI0Config(PreTrainedConfig):
     # Input / output structure.
     n_obs_steps: int = 1
-    chunk_size: int = 12
+    chunk_size: int = 30
     n_action_steps: int = 12
 
     normalization_mapping: dict[str, NormalizationMode] = field(

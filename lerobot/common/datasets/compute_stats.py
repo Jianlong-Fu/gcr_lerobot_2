@@ -282,7 +282,7 @@ def aggregate_multi_stats(ls_datasets: list, data_names: list, max_dim: int) -> 
                 stats[data_key]["min"][start_dim:start_dim+d_len] = agi_d.meta.stats[data_key]["min"][start_dim:start_dim+d_len]
     return stats
 
-def aggregate_same_stats(ls_datasets) -> dict[str, torch.Tensor]:
+def aggregate_same_stats(ls_datasets, data_names: list) -> dict[str, torch.Tensor]:
     """Aggregate stats of multiple LeRobot datasets into one set of stats without recomputing from scratch.
 
     The final stats will have the union of all data keys from each of the datasets.
@@ -294,8 +294,23 @@ def aggregate_same_stats(ls_datasets) -> dict[str, torch.Tensor]:
     - new_std = (std of all data)
     """
     data_keys = set()
-    for dataset in ls_datasets:
-        data_keys.update(dataset.meta.stats.keys()) # action, observation.state, ...
+    # for dataset in ls_datasets:
+    #     data_keys.update(dataset.meta.stats.keys()) # action, observation.state, ...
+    
+    
+    for i in range(len(data_names)):
+        dataset = ls_datasets[i]
+        d_name = data_names[i]
+        data_config = OXE_DATASET_CONFIGS[d_name]
+        image_obs_keys = data_config["image_obs_keys"]
+        # print(d_name, image_obs_keys)
+        for new_key, old_key in image_obs_keys.items():
+            if old_key != None:
+                dataset.meta.stats[f"observation.images.{new_key}"] = dataset.meta.stats[f"observation.images.{old_key}"]
+                if old_key != new_key:
+                    del dataset.meta.stats[f"observation.images.{old_key}"]
+        data_keys.update(dataset.meta.stats.keys())
+    
     stats = {k: {} for k in data_keys}
     
     for data_key in data_keys:

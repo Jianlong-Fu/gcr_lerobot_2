@@ -63,6 +63,9 @@ class TrainPipelineConfig(HubMixin):
     eval: EvalConfig = field(default_factory=EvalConfig)
     wandb: WandBConfig = field(default_factory=WandBConfig)
     deepspeed: str | None = None
+    uni_res: bool = False
+    uni_obs_tensor: bool = False
+    uni_res_hw: int = 224
 
     def __post_init__(self):
         self.checkpoint_path = None

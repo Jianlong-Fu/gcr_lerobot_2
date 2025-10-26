@@ -19,6 +19,9 @@ from lerobot.common.policies.factory import make_policy
 from lerobot.common.datasets.transforms import ImageTransforms
 from lerobot.common.datasets.lerobot_dataset import MultiSameDataset
 
+from torch.utils.data import DataLoader
+# from torch.utils.data import Dataloader
+
 def pil2tensor(pil_image):
     np_pil_image = np.array(pil_image).astype(np.float32)
     np_pil_image = np_pil_image.transpose((2, 0, 1)) / 255.0
@@ -108,7 +111,7 @@ def predict():
     for img in images:
         image_k4a_1 = decode_b64_image(img)
         image_k4a_1 = image_k4a_1[40:720,200:880,:] 
-        image_k4a_1 = Image.fromarray(image_k4a_1).resize((448, 448))
+        image_k4a_1 = Image.fromarray(image_k4a_1).resize((224, 224))
         image_k4a_1.save("/home/v-wenhuitan/pi_0_open/media/obs/k4a.jpg")
         item["primary"].append(image_k4a_1)
         
@@ -119,25 +122,32 @@ def predict():
     # sample_image = sample_image * -1
     # sample_image = Image.fromarray(sample_image)
     
-    # item["observation.images.secondary"] = decode_b64_image(resp['images'][1])
-    # item["observation.images.secondary"] = Image.fromarray(item["observation.images.secondary"]).resize((224,224))
+    item["observation.images.secondary"] = decode_b64_image(resp['images'][1])
+    top_shape = item["observation.images.secondary"].shape
+    if top_shape[0] > top_shape[1]:
+        # center crop
+        item["observation.images.secondary"] = item["observation.images.secondary"][top_shape[0]//2 - top_shape[1]//2:top_shape[0]//2 + top_shape[1]//2,:,:]
+    else:
+        item["observation.images.secondary"] = item["observation.images.secondary"][:,top_shape[1]//2-top_shape[0]//2:top_shape[1]//2+top_shape[0]//2,:]
+    item["observation.images.secondary"] = Image.fromarray(item["observation.images.secondary"]).resize((224,224))
+    
     # item["observation.images.secondary"] = sample_image
-    # item["observation.images.secondary"].save("/home/v-wenhuitan/pi_0_open/media/obs/real_1.jpg")
-    # item["observation.images.secondary"] = pil2tensor(item["observation.images.secondary"])
+    item["observation.images.secondary"].save("/home/v-wenhuitan/pi_0_open/media/obs/real_1.jpg")
+    item["observation.images.secondary"] = pil2tensor(item["observation.images.secondary"])
     
-    # item["observation.images.wrist"] = decode_b64_image(resp['images'][2])
-    # wrist_shape = item["observation.images.wrist"].shape
-    # if wrist_shape[0] > wrist_shape[1]:
-    #     # center crop
-    #     item["observation.images.wrist"] = item["observation.images.wrist"][wrist_shape[0]//2 - wrist_shape[1]//2:wrist_shape[0]//2 + wrist_shape[1]//2,:,:]
-    # else:
-    #     item["observation.images.wrist"] = item["observation.images.wrist"][:,wrist_shape[1]//2-wrist_shape[0]//2:wrist_shape[1]//2+wrist_shape[0]//2,:]
-    # item["observation.images.wrist"] = Image.fromarray(item["observation.images.wrist"]).resize((224,224))
+    item["observation.images.wrist"] = decode_b64_image(resp['images'][2])
+    wrist_shape = item["observation.images.wrist"].shape
+    if wrist_shape[0] > wrist_shape[1]:
+        # center crop
+        item["observation.images.wrist"] = item["observation.images.wrist"][wrist_shape[0]//2 - wrist_shape[1]//2:wrist_shape[0]//2 + wrist_shape[1]//2,:,:]
+    else:
+        item["observation.images.wrist"] = item["observation.images.wrist"][:,wrist_shape[1]//2-wrist_shape[0]//2:wrist_shape[1]//2+wrist_shape[0]//2,:]
+    item["observation.images.wrist"] = Image.fromarray(item["observation.images.wrist"]).resize((224,224))
     # item["observation.images.wrist"] = sample_image
-    # item["observation.images.wrist"].save("/home/v-wenhuitan/pi_0_open/media/obs/real_2.jpg")
-    # item["observation.images.wrist"] = pil2tensor(item["observation.images.wrist"])
+    item["observation.images.wrist"].save("/home/v-wenhuitan/pi_0_open/media/obs/real_2.jpg")
+    item["observation.images.wrist"] = pil2tensor(item["observation.images.wrist"])
     
-    # item["observation.state"] = (item["observation.state"] - state_mean) / (state_std + 1e-8)
+    # item["observation.state"] = (item["observation.state"] - state_mean) / (state_std + 1e-8) 
     item["observation.state"] = item["observation.state"].unsqueeze(0).to(dtype=torch.bfloat16)
     
     # input = prepare_input(item, processor)
@@ -165,20 +175,36 @@ def predict():
 def start_service(cfg: TrainPipelineConfig):
     
     # path_2_load = "/data_16T/deepseek/pi0pizza/mp_rank_00_model_states.pt"
-    path_2_load = "/data_16T/deepseek/pi0pizza/191/mp_rank_00_model_states.pt"
+    path_2_load = "/data_16T/deepseek/pi0pizza/step30k_plus.pt"
     
     cfg.policy.qwen_path = "/datassd_1T/qwen25vl/Qwen2.5-VL-7B-Instruct/"
     
     image_transforms = (ImageTransforms(cfg.dataset.image_transforms))
     seed = cfg.seed
+    
+    print(f"uni res: {cfg.uni_res}")
     dataset = MultiSameDataset(
         cfg=cfg, 
         image_transforms=image_transforms,
         # seed=seed,
         # data_mix=cfg.data_mix,
-        # vla2root_json="pizza.json",
+        vla2root_json="vla2root.json",
         # vla2root_json="vla2root_bak_single.json"
     )
+    
+    loader = DataLoader(
+        dataset=dataset,
+        batch_size=2,
+    )
+    print("\n"+"-"*20 + "Dataset Summary" + "-"*20)
+    data = next(iter(loader))
+    for k,v in data.items():
+        if isinstance(v, torch.Tensor):
+            print(k, v.shape)
+        elif isinstance(v, list):
+            print(k, len(v), v[0])
+        # print(k, v.shape)
+    print("-"*40+"\n")
     action_mean = dataset.stats["action"]["mean"][:14]
     dataset.stats["action"]["mean"] = dataset.stats["action"]["mean"][:14]
     action_std = dataset.stats["action"]["std"][:14]

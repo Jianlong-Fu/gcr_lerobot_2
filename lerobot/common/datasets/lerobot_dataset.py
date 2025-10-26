@@ -31,7 +31,9 @@ import packaging.version
 import PIL.Image as Image
 import torch
 import torch.utils
+import torch.nn.functional as F
 
+from torchvision import transforms
 from torch.utils.data import ConcatDataset, Subset
 from torch.utils.data.dataloader import default_collate
 
@@ -52,6 +54,14 @@ from lerobot.common.datasets.utils import cycle
 from lerobot.common.datasets.compute_stats import aggregate_stats, compute_episode_stats, aggregate_multi_stats, aggregate_same_stats
 from lerobot.common.datasets.transforms import ImageTransforms
 from lerobot.common.datasets.image_writer import AsyncImageWriter, write_image
+from lerobot.common.datasets.rotation_convert import (
+    euler_to_quaternion,
+    quaternion_to_euler,
+    ortho6d_to_quaternion,
+    quaternion_to_ortho6d,
+    euler_to_ortho6d,
+    ortho6d_to_euler
+)
 from lerobot.common.datasets.utils import (
     DEFAULT_FEATURES,
     DEFAULT_IMAGE_PATH,
@@ -807,13 +817,13 @@ class LeRobotDataset(torch.utils.data.Dataset):
             if vid_key == primary_obs_key:
                 # print(vid_key)
                 frames = decode_video_frames_torchvision(
-                    video_path, query_ts, self.tolerance_s, self.video_backend, return_all=True, return_type="image"
+                    video_path, query_ts, self.tolerance_s, self.video_backend, return_all=True, return_type="tensor"
                 )
                 # frames = [frame.resize((112, 112)) for frame in frames]
                 # item[vid_key] = frames
             else:
                 frames = decode_video_frames_torchvision(
-                    video_path, query_ts, self.tolerance_s, self.video_backend, return_type="image"
+                    video_path, query_ts, self.tolerance_s, self.video_backend, return_type="tensor"
                 )
             # item[vid_key] = frames.squeeze(0)
             item[vid_key] = frames
@@ -861,6 +871,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
         # Add task as a string
         task_idx = item["task_index"].item()
         item["task"] = self.meta.tasks[task_idx]
+        item["dataset_name"] = self.dataset_name
 
         return item
 
@@ -1388,7 +1399,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         print(parent_dir)
         # parent_dir = "/mnt/wangxiaofa/robot_dataset/lerobot-format/"
         
-        if self.cfg.dataset.processor is not None:
+        if len(self.cfg.dataset.processor) >= 5:
             self.processor = Qwen2_5_VLProcessor.from_pretrained(self.cfg.dataset.processor)
             self.processor.tokenizer.padding_side = "left"
         else:
@@ -1879,8 +1890,14 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             return get_hf_features_from_features(self.features)
         
 class MultiSameDataset(torch.utils.data.Dataset):
-    def __init__(self, cfg, image_transforms, wrist_image_transforms = None):
+    def __init__(self, cfg, image_transforms, 
+                 wrist_image_transforms = None,
+                 vla2root_json: str = None):
         super().__init__()
+        self.uni_res = cfg.uni_res
+        self.uni_obs_tensor = cfg.uni_obs_tensor
+        print(f"uni_res: {self.uni_res}")
+        self.uni_res_hw = cfg.uni_res_hw
         self.episodes = None
         parent_dir = cfg.dataset.root
         # parent_dir = "/mnt/wangxiaofa/robot_dataset/lerobot-format/"
@@ -1901,23 +1918,33 @@ class MultiSameDataset(torch.utils.data.Dataset):
                 is_pizza = True
         
         print(f"Dataset names:{dataset_names}")
+        with open(vla2root_json, "r") as f:
+            vla2data_root = json.load(f)
         
         for d_name in dataset_names:
-            if d_name == "pizza_single":
-                d_name = "pizza_v9_task_19_sep1"
-            data_root = os.path.join(parent_dir, d_name)
+            data_root = vla2data_root[d_name]
+            data_root = os.path.join(parent_dir, data_root)
             repo_id = f"bulldog-{d_name}" # any
             ds_meta = LeRobotDatasetMetadata(repo_id, root=data_root)
             if meta_features == None:
                 meta_features = ds_meta.features
             delta_timestamps = resolve_delta_timestamps(cfg.policy, ds_meta)
+            if "american" in d_name:
+                # episode_list = list(range(1501)) # 100个视频
+                episode_list = list(range(1501, 1601)) # 100个视频
+                # episode_list = list(range(1701))
+            else:
+                episode_list = None
             dataset = LeRobotDataset(
                 repo_id, 
                 root=data_root,
+                episodes=episode_list,
                 delta_timestamps=delta_timestamps,
                 image_transforms=image_transforms,
+                # wrist_image_transforms=wrist_image_transforms,
                 video_backend=cfg.dataset.video_backend,
                 revision=cfg.dataset.revision,
+                dataset_name=d_name
             )
             episode_this_dataset = dataset.num_episodes
             episode_count += episode_this_dataset
@@ -1925,15 +1952,60 @@ class MultiSameDataset(torch.utils.data.Dataset):
 
         self.dataset = ConcatDataset(self.datasets)
         self.num_episodes = episode_count
-        self.stats = aggregate_same_stats(self.datasets)
+        self.stats = aggregate_same_stats(self.datasets, dataset_names)
+        # update meta
+        for d_name in dataset_names:
+            data_config = OXE_DATASET_CONFIGS[d_name]
+            image_obs_keys = data_config["image_obs_keys"]
+            for new_key, old_key in image_obs_keys.items():
+                if f"observation.images.{new_key}" not in meta_features.keys():
+                    meta_features[f"observation.images.{new_key}"] = meta_features.pop(f"observation.images.{old_key}")
+        
+        all_new_obs_image_keys = ["observation.images.primary", 
+                                  "observation.images.secondary", 
+                                  "observation.images.wrist"]
+        
+        for key in list(meta_features.keys()):
+            if "observation.images." in key and key not in all_new_obs_image_keys:
+                del meta_features[key]
+                
+        self.tensor_trans = [
+            transforms.ColorJitter(brightness=0.4, contrast=0.2, saturation=0.2, hue=0.0),
+            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225), inplace=True),
+        ]
+        self.tensor_pipe = transforms.Compose(self.tensor_trans)
+        
         # if is_pizza:
         #     self.stats["action"]["mean"][6:] = 0
         #     self.stats["action"]["std"][6:] = 1
         #     self.stats["observation.state"]["mean"][8:] = 0
         #     self.stats["observation.state"]["std"][8:] = 1
+        self.use_state = False
+        if self.use_state == False:
+            self.stats["observation.state"]["mean"][:] = 0
+            self.stats["observation.state"]["std"][:] = 1
         # print(self.stats, meta_features)
         self.meta = LeRobotDatasetMetadata.create_with_stats_feats(stats=self.stats, features=meta_features) # Note: I added a class function
         self.meta.repo_id = "Any"
+        
+        # split train & val
+        # self.train_num = cfg.dataset.train_num
+        # if self.train_num > 0:
+        #     print(f"Use fixed train num {self.train_num} val num {self.num_episodes - self.train_num}")
+        #     self.dataset_len = self.train_num
+        #     data_range = list(range(len(self.dataset)))
+        #     random.seed(cfg.seed)
+        #     random.shuffle(data_range)
+        #     train_indices = data_range[:self.dataset_len]
+        #     val_indices = data_range[self.dataset_len:]
+        #     if cfg.dataset.split == "train":
+        #         self.dataset = Subset(self.dataset, train_indices)
+        #     else:
+        #         self.dataset = Subset(self.dataset, val_indices)
+        # else:
+        #     self.dataset_len = len(self.dataset)
+        #     print(f"Train ratio {self.train_ratio}, train dataset len {len(self.dataset)}")
+        # if self.train_ratio < 1.0:
     
     def __len__(self):
         return len(self.dataset)
@@ -1958,20 +2030,89 @@ class MultiSameDataset(torch.utils.data.Dataset):
             return get_hf_features_from_features(self.features)
     
     def __getitem__(self, index):
+        dim_act =20
         item = self.dataset[index]
-        # 50 14, 15
-        # print(item["action"].shape, item["observation.state"].shape)
-        
-        # item["action"][:, 6] = torch.where(
-        #     item["action"][:, 6] < 0.5,
-        #     torch.tensor(-1.0, device=item["action"].device),
-        #     torch.tensor(1.0, device=item["action"].device)
-        # )
-        # # print(item["action"][:, 6])
-        # item["action"][:, 7:] = 0
-        # item["observation.state"][8:] = 0
-        return item 
 
+        dataset_name = item["dataset_name"]
+        
+        # State & Action Unify
+        state = torch.zeros(dim_act, dtype=torch.float32)
+        eef_pos = item['observation.state'][:3]
+        eef_quat = item['observation.state'][3:7]
+        eef_orth6d = quaternion_to_ortho6d(eef_quat)
+        gripper = item['observation.state'][7:8]
+        
+        state[:3] = eef_pos
+        state[3:9] = eef_orth6d
+        state[9:10] = gripper
+        item['observation.state'] = state
+        
+        chunk_size = item['action'].shape[0]
+        action = torch.zeros((chunk_size, dim_act), dtype=torch.float32)
+        act_tran = item['action'][:, :3]
+        act_rot = item['action'][:, 3:6]
+        
+        act_gripper = item['action'][:, 6:7]
+        act_orth6d = euler_to_ortho6d(act_rot)
+        
+        action[:, :3] = act_tran
+        action[:, 3:9] = act_orth6d
+        action[:, 9:10] = act_gripper
+        item['action'] = action
+
+        data_config = OXE_DATASET_CONFIGS[dataset_name]
+        image_obs_keys = data_config["image_obs_keys"]
+        exist_image = None
+        key_2_save = []
+        for new_key, old_key in image_obs_keys.items():
+            if old_key != None:
+                item[f"observation.images.{new_key}"] = item[f"observation.images.{old_key}"]
+                length, channel, height, width = item[f"observation.images.{new_key}"].shape
+                if length > 1:
+                    item[f"observation.images.{new_key}"] = item[f"observation.images.{new_key}"][0].unsqueeze(0)
+                # item[f"observation.images.{new_key}"] = item[f"observation.images.{new_key}"][0]
+                if self.uni_res:
+                    item[f"observation.images.{new_key}"] = F.interpolate(
+                        item[f"observation.images.{new_key}"],
+                        size=(self.uni_res_hw, self.uni_res_hw),
+                        mode='bilinear',
+                        align_corners=False
+                    ).squeeze(0)
+                if old_key != new_key:
+                    del item[f"observation.images.{old_key}"]
+            else:
+                # if missing, use zero
+                item[f"observation.images.{new_key}"] = torch.zeros_like(exist_image)
+            key_2_save.append(f"observation.images.{new_key}")
+        
+        key_2_remove = []
+        for key, value in item.items():
+            if "observation.images." in key and key not in key_2_save:
+                key_2_remove.append(key)
+       
+        for key in key_2_remove:
+            del item[key]
+        if self.uni_obs_tensor:
+            images = torch.cat([item[key].unsqueeze(0) for key in key_2_save], dim=0)
+            images = images.float() / 255.0
+            images = self.tensor_pipe(images)
+            item["image_input"] = images
+            
+            view_count = len(key_2_save)
+            item['image_mask'] = torch.ones(view_count, dtype=torch.float32)
+            # key_2_save.append("observation.images.uni")
+            for new_key in key_2_save:
+                del item[new_key]
+            
+        if self.use_state == False:
+            item["observation.state"][:] = 0
+        
+        # print("\n" + "-"*40)
+        # for k, v in item.items():
+        #     if isinstance(v, torch.Tensor):
+        #         print(f"{k}: {v.shape}")
+        # print("-"*40+"\n")
+        return item 
     
 def resolve_delta_timestamps(
     cfg: PreTrainedConfig, ds_meta: LeRobotDatasetMetadata
