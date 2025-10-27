@@ -2604,7 +2604,7 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         else:
             raise ValueError(f'invalid image shape {pixel_values.shape}')
         
-        print(f"pixel value dtype: {pixel_values.dtype}, x dtype: {x.dtype}")
+        # print(f"pixel value dtype: {pixel_values.dtype}, x dtype: {x.dtype}")
         
         if self.image_pos_embed is not None:
             x = x.view(batch_size * T, -1, x.shape[-1])
