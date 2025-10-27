@@ -282,5 +282,66 @@ class XVLA(PreTrainedPolicy):
         self._action_queue = deque([], maxlen=self.config.num_actions)
     
     @torch.no_grad
-    def select_action(self, batch: dict[str, Tensor]) -> Dict[str, torch.Tensor]:
-        print("\n")
+    def select_action(self, 
+                    batch: dict[str, Tensor],
+                    steps: int = 10
+                ) -> Dict[str, torch.Tensor]:
+        """
+        Iterative denoising sampler (linear schedule).
+
+        Parameters
+        ----------
+        input_ids : LongTensor, shape [B, L]
+            Token IDs for language input.
+        image_input : FloatTensor, shape [B, V, C, H, W]
+            Multi-view images.
+        image_mask : Tensor, shape [B, V]
+            Mask for views (1 = valid, 0 = pad).
+        domain_id : LongTensor, shape [B]
+            Domain/task IDs.
+        proprio : Tensor, shape [B, dim_proprio]
+            Proprioceptive state.
+        steps : int
+            Number of denoising iterations.
+
+        Returns
+        -------
+        Tensor, shape [B, T=num_actions, dim_action]
+            Predicted action sequence; sigmoid applied only on gripper channels.
+        """
+        self.eval()
+        image_input = batch["image_input"]
+        image_mask = batch["image_mask"]
+        device = image_input.device
+        language_instruction = self.text_preprocessor.encode_language(batch["task"])
+        input_ids = language_instruction["input_ids"].to(device)
+        
+        proprio = batch['observation.state']
+        # action = batch["action"]
+        domain_id = [find_domain_id(dataset_name) for dataset_name in batch["dataset_name"]]
+        domain_id = torch.tensor(domain_id, device=device)
+        
+        enc = self.forward_vlm(input_ids=input_ids, pixel_values=image_input, image_mask=image_mask)
+        
+        B = input_ids.shape[0]
+        device = input_ids.device
+        x1 = torch.randn(B, self.config.num_actions, self.criterion.DIM_ACTION, device=device)
+        action = torch.zeros(B, self.config.num_actions, self.criterion.DIM_ACTION, device=device)
+        
+        steps = max(int(steps), 1)
+        for i in range(steps, 0, -1):
+            t = torch.full((B,), i / steps, device=device)
+            action_with_noise = x1 * t.view(-1, 1, 1) + action * (1 - t).view(-1, 1, 1)
+            proprio_m, action_with_noise_m = self.mask_gripper(proprio, action_with_noise)
+            action = self.transformer(
+                domain_id=domain_id,
+                action_with_noise=action_with_noise_m,
+                t=t,
+                proprio=proprio_m,
+                **enc,
+            )
+
+        idx = self.criterion.GRIPPER_IDX
+        action[..., idx] = torch.sigmoid(action[..., idx])
+        return action
+        # for t in range(self.config.num_actions):

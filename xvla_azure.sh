@@ -162,6 +162,7 @@ torchrun \
     --policy.optimizer_lr=$OPTIMIZER_LR \
     --policy.optimizer_weight_decay=$OPTIMIZER_WEIGHT_DECAY \
     --policy.scheduler_decay_lr=$OPTIMIZER_DECAY_LR \
+    --policy.pretrained_path=$PRETRAINED_PATH \
     --wandb.enable=true \
     --wandb.project="pi0first" \
     --job_name="$JOB_NAME" \

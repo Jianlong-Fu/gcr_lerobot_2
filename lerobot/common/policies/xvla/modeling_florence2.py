@@ -2604,6 +2604,7 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         else:
             raise ValueError(f'invalid image shape {pixel_values.shape}')
         
+        print(f"pixel value dtype: {pixel_values.dtype}, x dtype: {x.dtype}")
         
         if self.image_pos_embed is not None:
             x = x.view(batch_size * T, -1, x.shape[-1])
@@ -2638,7 +2639,8 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
 
         x = torch.cat(new_x, dim=1)
         # print(f"new_x: {x.shape}, projection shapw: {self.image_projection.shape}")
-
+        
+        x = x.to(self.image_projection.dtype)
         x = x @ self.image_projection
         x = self.image_proj_norm(x)
 
