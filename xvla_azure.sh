@@ -135,7 +135,9 @@ fi
 
 # 固定输出目录（根据需求修改）
 FIXED_OUTPUT_DIR="/mnt/wangxiaofa/xvla_finetune"
-
+TOKENIZERS_PARALLELISM=FALSE
+# 设定环境变量
+export TOKENIZERS_PARALLELISM=$TOKENIZERS_PARALLELISM
 # 执行训练命令
 torchrun \
     --nnodes=$NNODES \
