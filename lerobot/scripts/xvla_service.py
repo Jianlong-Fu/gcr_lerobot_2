@@ -218,7 +218,7 @@ def predict():
 def start_service(cfg: TrainPipelineConfig):
     
     # path_2_load = "/data_16T/deepseek/pi0pizza/mp_rank_00_model_states.pt"
-    path_2_load = "/data_16T/deepseek/xvla_finetune/cup_full_plus_1027/step15000.pt"
+    path_2_load = "/data_16T/deepseek/xvla_finetune/cup_full_plus_1028_scra/step16000.pt"
     
     image_transforms = (ImageTransforms(cfg.dataset.image_transforms))
     seed = cfg.seed
