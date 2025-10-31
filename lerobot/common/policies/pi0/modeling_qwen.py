@@ -336,10 +336,10 @@ class QwenPolicy(PreTrainedPolicy):
         std = batch["action.std"]
         
         state = self.prepare_state(batch)
-        state = torch.ones_like(state)
+        # state = torch.ones_like(state)
         state = self.convert_to_dtype(state)
         
-        print(f"state: {state.shape}, inputids: {input_ids.shape}")
+        # print(f"state: {state.shape}, inputids: {input_ids.shape}")
         
         actions = self.model.sample_actions(input_ids, attention_mask, pixel_values, image_grid_thw, pixel_values_videos, video_grid_thw, second_per_grid_ts, state)
         actions = actions.cpu()
