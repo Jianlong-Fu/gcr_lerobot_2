@@ -18,7 +18,7 @@ import logging
 import subprocess
 import decord
 import warnings
-from torchcodec.decoders import VideoDecoder
+# from torchcodec.decoders import VideoDecoder
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -96,27 +96,27 @@ def decode_video_frames_decord(
     
     return frames_torch
 
-def decode_video_frames_torchcodec(
-    video_path: Path | str,
-    timestamps: list[float],
-    tolerance_s: float,
-    return_all: bool = False,
-    return_type: str = "tensor",
-):
+# def decode_video_frames_torchcodec(
+#     video_path: Path | str,
+#     timestamps: list[float],
+#     tolerance_s: float,
+#     return_all: bool = False,
+#     return_type: str = "tensor",
+# ):
     
-    video_path = str(video_path)
-    decoder = VideoDecoder(video_path, num_ffmpeg_threads=3, seek_mode="approximate")
+#     video_path = str(video_path)
+#     decoder = VideoDecoder(video_path, num_ffmpeg_threads=3, seek_mode="approximate")
     
-    if not return_all:
-        frames = decoder.get_frames_played_at(timestamps)
-    else:
-        min_ts = min(min(timestamps), 0)
-        frame_duration = 1 / decoder.metadata.average_fps
-        max_ts = max(timestamps)
-        timestamp_list = np.arange(min_ts, max_ts, frame_duration).tolist()
-        frames = decoder.get_frames_in_range(0, 800, step=1)
-        # frames = decoder.get_frames_played_at(timestamp_list)
-    return frames
+#     if not return_all:
+#         frames = decoder.get_frames_played_at(timestamps)
+#     else:
+#         min_ts = min(min(timestamps), 0)
+#         frame_duration = 1 / decoder.metadata.average_fps
+#         max_ts = max(timestamps)
+#         timestamp_list = np.arange(min_ts, max_ts, frame_duration).tolist()
+#         frames = decoder.get_frames_in_range(0, 800, step=1)
+#         # frames = decoder.get_frames_played_at(timestamp_list)
+#     return frames
 
 def decode_video_frames_torchvision(
     video_path: Path | str,

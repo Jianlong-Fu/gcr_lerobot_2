@@ -808,6 +808,12 @@ OXE_DATASET_CONFIGS = {
         "state_obs_keys": ["EEF_state", None, "gripper_state"],
         "state_encoding": StateEncoding.POS_EULER,
         "action_encoding": ActionEncoding.EEF_POS,
+    },
+    "american_data": {
+        "image_obs_keys": {"primary": "cam_high", "secondary": "cam_left_wrist", "wrist": "cam_right_wrist"},
+        "depth_obs_keys": {"primary": None, "secondary": None, "wrist": None},
+        "state_obs_keys": ["EEF_state", None, "gripper_state"],
+        "state_encoding": StateEncoding.POS_EULER,
+        "action_encoding": ActionEncoding.EEF_POS,
     }
-    
 }
