@@ -10,7 +10,7 @@ from lerobot.common.datasets.video_utils import (
 )
 
 if __name__ == "__main__":
-    video_path = "/mnt/wangxiaofa/robot_dataset/lerobot-format/aloha-taskbox_lerobot/videos/chunk-000/observation.images.cam_high/episode_000031.mp4"
+    video_path = "/scratch/amlt_code/gcr_lerobot_2/robot_dataset/lerobot-format/aloha-taskbox_lerobot/videos/chunk-000/observation.images.cam_high/episode_000031.mp4"
     
     timestamps = [20.0]
     
