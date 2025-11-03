@@ -114,8 +114,8 @@ def decode_video_frames_torchcodec(
         frame_duration = 1 / decoder.metadata.average_fps
         max_ts = max(timestamps)
         timestamp_list = np.arange(min_ts, max_ts, frame_duration).tolist()
-        frames = decoder.get_frames_in_range(0, 800, step=1)
-        # frames = decoder.get_frames_played_at(timestamp_list)
+        # frames = decoder.get_frames_in_range(0, 800, step=1)
+        frames = decoder.get_frames_played_at(timestamp_list)
     return frames
 
 def decode_video_frames_torchvision(
