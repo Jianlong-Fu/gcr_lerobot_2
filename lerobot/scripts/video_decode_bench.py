@@ -10,17 +10,17 @@ from lerobot.common.datasets.video_utils import (
 )
 
 if __name__ == "__main__":
-    video_path = "/data_16T/lerobot_openx/aloha-taskbox_lerobot/videos/chunk-000/observation.images.cam_high/episode_000031.mp4"
+    video_path = "/mnt/wangxiaofa/robot_dataset/lerobot-format/aloha-taskbox_lerobot/videos/chunk-000/observation.images.cam_high/episode_000031.mp4"
     
     timestamps = [20.0]
     
-    # total_start = time.time()
-    # for i in tqdm(range(100)):
-    #     start = time.time()
-    #     frames = decode_video_frames_torchvision(video_path, timestamps, tolerance_s=1e-4, return_all=True)
-    #     # print(f"torchvision: {time.time() - start}")
+    total_start = time.time()
+    for i in tqdm(range(100)):
+        start = time.time()
+        frames = decode_video_frames_torchvision(video_path, timestamps, tolerance_s=1e-4, return_all=True)
+        # print(f"torchvision: {time.time() - start}")
 
-    # print(f"torch vision total: {time.time() - total_start}")
+    print(f"torch vision total: {time.time() - total_start}")
       
     total_start = time.time()  
     for i in tqdm(range(100)):
