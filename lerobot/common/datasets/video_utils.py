@@ -16,7 +16,6 @@
 import json
 import logging
 import subprocess
-import decord
 import warnings
 from torchcodec.decoders import VideoDecoder
 from collections import OrderedDict
@@ -29,72 +28,29 @@ import pyarrow as pa
 import torch
 import torchvision
 from datasets.features.features import register_feature
+from typing import List
 from PIL import Image
+from joblib import Parallel, delayed, cpu_count
 
-# def split_timestamps(indices: List[int], num_chunks: int) -> List[List[int]]:
-#     """Split a list of indices into approximately equal chunks."""
-#     chunk_size = len(indices) // num_chunks
-#     chunks = []
+def split_indices(indices: List[int], num_chunks: int) -> List[List[int]]:
+    """Split a list of indices into approximately equal chunks."""
+    chunk_size = len(indices) // num_chunks
+    chunks = []
 
-#     for i in range(num_chunks - 1):
-#         chunks.append(indices[i * chunk_size:(i + 1) * chunk_size])
+    for i in range(num_chunks - 1):
+        chunks.append(indices[i * chunk_size:(i + 1) * chunk_size])
 
-#     # Last chunk may be slightly larger
-#     chunks.append(indices[(num_chunks - 1) * chunk_size:])
-#     return chunks
-
-# def decode_torchcodec_with_multithreading(
-#     indices: List[int],
-#     num_threads: int,
-#     video_path=None
-# ):
-#     pass
-
-def decode_video_frames_decord(
-    video_path: str,
-    timestamps: list[float],
-    tolerance_s: float,
-    return_all: bool = False,
-) -> torch.Tensor:
+    # Last chunk may be slightly larger
+    chunks.append(indices[(num_chunks - 1) * chunk_size:])
+    return chunks
     
-    video_path = str(video_path)
-    # 使用CPU上下文，也可以用 decord.gpu(0) (如果安装了GPU版本)
-    vr = decord.VideoReader(video_path, ctx=decord.cpu(0))
-    
-    if not vr:
-        raise FileNotFoundError(f"Video not found: {video_path}")
-
-    # 1. (快速) 获取所有帧的时间戳 (pts)
-    # get_frame_timestamp 返回 (pts, time_base)
-    all_pts = vr.get_frame_timestamp(range(len(vr)))
-    all_ts_seconds = all_pts[:, 0] * all_pts[:, 1]
-
-    # 2. (在内存中) 找到最接近的帧索引
-    query_ts = torch.tensor(timestamps)
-    loaded_ts = torch.from_numpy(all_ts_seconds)
-
-    # 计算距离 (这和你原来的逻辑一样)
-    dist = torch.cdist(query_ts[:, None], loaded_ts[:, None], p=1)
-    min_dist, argmin_indices = dist.min(1)
-
-    # 检查容忍度
-    assert (min_dist < tolerance_s).all(), (
-        f"Tolerance check failed. {min_dist[min_dist >= tolerance_s]} > {tolerance_s}"
-        f"\nVideo: {video_path}"
-    )
-
-    # 3. (高效) 批量解码所需的帧
-    # .tolist() 是必须的，get_batch 接受 list 或 np.ndarray
-    indices = argmin_indices.tolist()
-    if return_all:
-        indices = list(range(max(indices)))
-    frames_decord = vr.get_batch(indices) # shape: (N, H, W, C), dtype=uint8
-
-    # 4. 转换为 torch.Tensor 并匹配 torchvision 的 (N, C, H, W) 格式
-    frames_torch = torch.from_numpy(frames_decord.asnumpy())
-    frames_torch = frames_torch.permute(0, 3, 1, 2) # (N, C, H, W)
-    
-    return frames_torch
+def decode_frame_torchcodec(
+    raw_bytes: bytes,
+    indices: List[int],
+): 
+    decoder = VideoDecoder(raw_bytes, seek_mode="approximate")
+    frames = decoder.get_frames_at(indices)
+    return frames
 
 def decode_video_frames_torchcodec(
     video_path: Path | str,
@@ -102,20 +58,30 @@ def decode_video_frames_torchcodec(
     tolerance_s: float,
     return_all: bool = False,
     return_type: str = "tensor",
+    worker_count: int = 1,
 ):
     
     video_path = str(video_path)
-    decoder = VideoDecoder(video_path, num_ffmpeg_threads=3, seek_mode="approximate")
+    with open(video_path, "rb") as f:
+        raw_bytes = f.read()
+    decoder = VideoDecoder(raw_bytes, seek_mode="approximate")
+    frame_duration = 1 / decoder.metadata.average_fps
     
     if not return_all:
-        frames = decoder.get_frames_played_at(timestamps)
+        frame_list = [round(ts / frame_duration) for ts in timestamps]
+        frame_list.sort()
     else:
-        min_ts = min(min(timestamps), 0)
-        frame_duration = 1 / decoder.metadata.average_fps
         max_ts = max(timestamps)
-        timestamp_list = np.arange(min_ts, max_ts, frame_duration).tolist()
-        # frames = decoder.get_frames_in_range(0, 800, step=1)
-        frames = decoder.get_frames_played_at(timestamp_list)
+        max_tx_frame = round(max_ts / frame_duration)
+        frame_list = np.arange(0, max_tx_frame, 1).tolist()
+    if worker_count == 1:
+        frames = decoder.get_frames_at(frame_list)
+    else:
+        chunks = split_indices(frame_list, num_chunks=worker_count)
+        results = Parallel(n_jobs=worker_count, prefer='threads', verbose=0)(
+            delayed(decode_frame_torchcodec)(raw_bytes, chunk) for chunk in chunks
+        )
+        frames = torch.cat([frame_batch.data for frame_batch in results], dim=0)
     return frames
 
 def decode_video_frames_torchvision(
