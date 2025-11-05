@@ -108,6 +108,7 @@ from tabulate import tabulate
 
 CODEBASE_VERSION = "v2.1"
 PAD_VALUE = {"attention_mask": 0, "input_ids": 151643}
+GRIPPER_INDEX = [16, 33]
 
 def set_seed(seed=42):
     random.seed(seed)
@@ -817,13 +818,13 @@ class LeRobotDataset(torch.utils.data.Dataset):
             if vid_key == primary_obs_key:
                 # print(vid_key)
                 frames = decode_video_frames_torchvision(
-                    video_path, query_ts, self.tolerance_s, self.video_backend, return_all=True, return_type="tensor"
+                    video_path, query_ts, self.tolerance_s, self.video_backend, return_all=True, return_type="image"
                 )
                 # frames = [frame.resize((112, 112)) for frame in frames]
                 # item[vid_key] = frames
             else:
                 frames = decode_video_frames_torchvision(
-                    video_path, query_ts, self.tolerance_s, self.video_backend, return_type="tensor"
+                    video_path, query_ts, self.tolerance_s, self.video_backend, return_type="image"
                 )
             # item[vid_key] = frames.squeeze(0)
             item[vid_key] = frames
@@ -1377,6 +1378,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         super().__init__()
         self.episodes = None
         self.cfg = cfg
+        self.policy = cfg.policy.type
         # set seed
         set_seed(seed)
         # get sample weights
@@ -1557,6 +1559,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             item = selected_dataset[data_id]
             dataset_name = self.dataset_names[ds_id]
             item["dataset_name"] = dataset_name
+            item = self.format_item_policywise(item, norm=True)
             data_config = OXE_DATASET_CONFIGS[dataset_name]
             image_obs_keys = data_config["image_obs_keys"]
             
@@ -1665,50 +1668,50 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         ori_action = copy.deepcopy(item["action"])
         ori_state = copy.deepcopy(item["observation.state"])
         # Normlize the action and observation vectors
-        if "agi" in item['dataset_name']:
-            item["action"] = (item["action"] - self.stats["action"]["mean"]) / (self.stats["action"]["std"] + 1e-8)
-            item["observation.state"] = (item["observation.state"] - self.stats["observation.state"]["mean"]) / (self.stats["observation.state"]["std"] + 1e-8)
+        # if "agi" in item['dataset_name']:
+        #     item["action"] = (item["action"] - self.stats["action"]["mean"]) / (self.stats["action"]["std"] + 1e-8)
+        #     item["observation.state"] = (item["observation.state"] - self.stats["observation.state"]["mean"]) / (self.stats["observation.state"]["std"] + 1e-8)
             
-        elif "pizza" in item['dataset_name']:
-            state_mean = torch.zeros(self.max_state_dim)
-            state_mean[:15] = self.stats["observation.state"]["mean"][:15]
-            state_std = torch.ones(self.max_state_dim)
-            state_std[:15] = self.stats["observation.state"]["std"][:15]
-            item["observation.state"] = (item["observation.state"] - state_mean) / (state_std + 1e-8)
-            state = torch.zeros_like(item["observation.state"])
-            state_device = item["observation.state"].device
-            state[:8] = item["observation.state"][:8] # 32
-            item["observation.state"] = state.to(state_device)
+        # elif "pizza" in item['dataset_name']:
+        #     state_mean = torch.zeros(self.max_state_dim)
+        #     state_mean[:15] = self.stats["observation.state"]["mean"][:15]
+        #     state_std = torch.ones(self.max_state_dim)
+        #     state_std[:15] = self.stats["observation.state"]["std"][:15]
+        #     item["observation.state"] = (item["observation.state"] - state_mean) / (state_std + 1e-8)
+        #     state = torch.zeros_like(item["observation.state"])
+        #     state_device = item["observation.state"].device
+        #     state[:8] = item["observation.state"][:8] # 32
+        #     item["observation.state"] = state.to(state_device)
             
-            action_mean = torch.zeros(self.max_action_dim)
-            action_mean[:14] = self.stats["action"]["mean"][:14]
+        #     action_mean = torch.zeros(self.max_action_dim)
+        #     action_mean[:14] = self.stats["action"]["mean"][:14]
             
-            action_std = torch.ones(self.max_action_dim)
-            action_std[:14] = self.stats["action"]["std"][:14]
-            # action_std[6] = 1.0
-            # action_mean[6] = 0.0
-            item["action"] = (item["action"] - action_mean) / (action_std + 1e-8)
-            action = torch.zeros_like(item["action"])
-            action_device = item["action"].device
-            # action_len = item["action"].shape[0]
-            # for idx in range(action_len):
-            #     action[idx][:7] = item["action"][idx][:7]
-            # action[:][:7] = item["action"][:][:7]
-            action[:, :7] = item["action"][:, :7] # 50 x 7
-            item["action"] = action.to(action_device)
+        #     action_std = torch.ones(self.max_action_dim)
+        #     action_std[:14] = self.stats["action"]["std"][:14]
+        #     # action_std[6] = 1.0
+        #     # action_mean[6] = 0.0
+        #     item["action"] = (item["action"] - action_mean) / (action_std + 1e-8)
+        #     action = torch.zeros_like(item["action"])
+        #     action_device = item["action"].device
+        #     # action_len = item["action"].shape[0]
+        #     # for idx in range(action_len):
+        #     #     action[idx][:7] = item["action"][idx][:7]
+        #     # action[:][:7] = item["action"][:][:7]
+        #     action[:, :7] = item["action"][:, :7] # 50 x 7
+        #     item["action"] = action.to(action_device)
             
-        else:
-            state_mean = torch.zeros(self.max_state_dim)
-            state_mean[:8] = self.stats["observation.state"]["mean"][:8]
-            state_std = torch.ones(self.max_state_dim)
-            state_std[:8] = self.stats["observation.state"]["std"][:8]
-            item["observation.state"] = (item["observation.state"] - state_mean) / (state_std + 1e-8)
+        # else:
+        #     state_mean = torch.zeros(self.max_state_dim)
+        #     state_mean[:8] = self.stats["observation.state"]["mean"][:8]
+        #     state_std = torch.ones(self.max_state_dim)
+        #     state_std[:8] = self.stats["observation.state"]["std"][:8]
+        #     item["observation.state"] = (item["observation.state"] - state_mean) / (state_std + 1e-8)
             
-            action_mean = torch.zeros(self.max_action_dim)
-            action_mean[:7] = self.stats["action"]["mean"][:7]
-            action_std = torch.ones(self.max_action_dim)
-            action_std[:7] = self.stats["action"]["std"][:7]
-            item["action"] = (item["action"] - action_mean) / (action_std + 1e-8)
+        #     action_mean = torch.zeros(self.max_action_dim)
+        #     action_mean[:7] = self.stats["action"]["mean"][:7]
+        #     action_std = torch.ones(self.max_action_dim)
+        #     action_std[:7] = self.stats["action"]["std"][:7]
+        #     item["action"] = (item["action"] - action_mean) / (action_std + 1e-8)
         
         vl_item = self._prepare_data(item)
         
@@ -1872,6 +1875,157 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
 
         return return_dict
     
+    def bimanual_format_actionstate(self, item, dim_act: int = None, norm=False):
+        
+        # 1. 确定维度
+        # 如果 dim_act 为 None，则使用默认值 32
+        current_dim = dim_act if dim_act is not None else 32
+        
+        # 2. 归一化 (基于你的修改)
+        # 这一步现在会修改 item 中的 *源* 张量
+        if norm:
+            state_mean = self.stats["observation.state"]["mean"]
+            state_std = self.stats["observation.state"]["std"]
+            action_mean = self.stats["action"]["mean"]
+            action_std = self.stats["action"]["std"]
+            for idx in GRIPPER_INDEX:
+                state_mean[idx] = 0
+                state_std[idx] = 1
+                action_mean[idx] = 0
+                action_std[idx] = 1
+            item['observation.state'] = (item['observation.state'] - state_mean) / (state_std + 1e-8)
+            item['action'] = (item['action'] - action_mean) / (action_std + 1e-8)
+
+        # 3. 缓存（可能已被归一化的）源张量
+        src_state = item['observation.state']
+        src_action = item['action']
+        
+        # 4. 初始化 *新* 的目标张量
+        state = torch.zeros(current_dim, dtype=torch.float32)
+        action = torch.zeros((src_action.shape[0], current_dim), dtype=torch.float32)
+        
+        # 5. 直接从源切片到目标张量 (消除了所有中间变量)
+        if dim_act is not None:
+            # "xvla" 风格 (使用 orth6d)
+            state[:3] = src_state[:3]       # left_eef_pos
+            state[3:9] = src_state[10:16]   # left_eef_orth6d
+            state[9:10] = src_state[16:17]  # left_gripper
+            state[10:13] = src_state[17:20] # right_eef_pos
+            state[13:19] = src_state[27:33] # right_eef_orth6d
+            state[19:20] = src_state[33:34] # right_gripper
+            
+            action[:, :3] = src_action[:, :3]     # left_act_tran
+            action[:, 3:9] = src_action[:, 10:16] # left_act_orth6d
+            action[:, 9:10] = src_action[:, 16:17] # left_act_gripper
+            action[:, 10:13] = src_action[:, 17:20] # right_act_tran
+            action[:, 13:19] = src_action[:, 27:33] # right_act_orth6d
+            action[:, 19:20] = src_action[:, 33:34] # right_act_gripper
+        else:
+            # "qwen"/"pi0" 风格 (使用 quat/euler, default_dim=32)
+            state[:3] = src_state[:3]       # left_eef_pos
+            state[3:7] = src_state[3:7]     # left_eef_quat
+            state[7:8] = src_state[16:17]   # left_gripper
+            state[8:11] = src_state[17:20]  # right_eef_pos
+            state[11:15] = src_state[20:24] # right_eef_quat
+            state[15:16] = src_state[33:34] # right_gripper
+            
+            action[:, :3] = src_action[:, :3]      # left_act_tran
+            action[:, 3:6] = src_action[:, 7:10]   # left_act_euler
+            action[:, 6:7] = src_action[:, 16:17]  # left_act_gripper
+            action[:, 7:10] = src_action[:, 17:20]  # right_act_tran
+            action[:, 10:13] = src_action[:, 24:27] # right_act_euler
+            action[:, 13:14] = src_action[:, 33:34] # right_act_gripper
+            
+        # 6. 将 *新格式化* 的张量覆盖回 item
+        item["observation.state"] = state
+        item["action"] = action
+        
+        return item
+    
+    def format_item_policywise(self, item, norm=False):
+        """
+        精简版：
+        1. 删除了 "mono" 分支中所有的中间变量。
+        2. 保留了核心的策略路由逻辑。
+        """
+        
+        dataset_type = "bi" if "american_data" in item['dataset_name'] else "mono"
+        
+        if self.policy == "xvla":
+            dim_act = 20
+            if dataset_type == "mono":
+                if norm:
+                    state_mean = self.stats["observation.state"]["mean"]
+                    state_std = self.stats["observation.state"]["std"]
+                    action_mean = self.stats["action"]["mean"]
+                    action_std = self.stats["action"]["std"]
+                    for idx in GRIPPER_INDEX:
+                        state_mean[idx] = 0
+                        state_std[idx] = 1
+                        action_mean[idx] = 0
+                        action_std[idx] = 1
+                    item['observation.state'] = (item['observation.state'] - state_mean) / (state_std + 1e-8)
+                    item['action'] = (item['action'] - action_mean) / (action_std + 1e-8)
+                    
+                # 直接切片赋值，移除 eef_pos, act_tran 等变量
+                src_state = item['observation.state']
+                src_action = item['action']
+                
+                state = torch.zeros(dim_act, dtype=torch.float32)
+                state[:3] = src_state[:3]
+                state[3:9] = src_state[10:16] # eef_orth6d
+                state[9:10] = src_state[16:17] # gripper
+                item['observation.state'] = state
+                
+                action = torch.zeros((src_action.shape[0], dim_act), dtype=torch.float32)
+                action[:, :3] = src_action[:, :3]
+                action[:, 3:9] = src_action[:, 10:16] # act_orth6d
+                action[:, 9:10] = src_action[:, 16:17]  # act_gripper
+                item['action'] = action
+                
+            else: # "bi"
+                item = self.bimanual_format_actionstate(item, norm=norm, dim_act=dim_act)
+            return item
+            
+        elif self.policy == "qwen" or self.policy == "pi0":
+            if dataset_type == "mono":
+                if norm:
+                    state_mean = self.stats["observation.state"]["mean"]
+                    state_std = self.stats["observation.state"]["std"]
+                    action_mean = self.stats["action"]["mean"]
+                    action_std = self.stats["action"]["std"]
+                    for idx in GRIPPER_INDEX:
+                        state_mean[idx] = 0
+                        state_std[idx] = 1
+                        action_mean[idx] = 0
+                        action_std[idx] = 1
+                    item['observation.state'] = (item['observation.state'] - state_mean) / (state_std + 1e-8)
+                    item['action'] = (item['action'] - action_mean) / (action_std + 1e-8)
+                    
+                # 直接切片赋值
+                src_state = item['observation.state']
+                src_action = item['action']
+                
+                state = torch.zeros(8, dtype=torch.float32) # dim_state = 8
+                state[:3] = src_state[:3]
+                state[3:7] = src_state[3:7]   # eef_quat
+                state[7:8] = src_state[16:17] # gripper
+                item['observation.state'] = state
+                
+                action = torch.zeros((src_action.shape[0], 7), dtype=torch.float32) # dim_act = 7
+                action[:, :3] = src_action[:, :3]
+                action[:, 3:6] = src_action[:, 7:10]  # act_euler
+                action[:, 6:7] = src_action[:, 16:17] # act_gripper
+                item['action'] = action
+                
+            else: # "bi"
+                # 注意：这里调用 bimanual 时不传递 dim_act，使其使用默认值 None -> 32
+                item = self.bimanual_format_actionstate(item, norm=norm)
+            return item
+            
+        else:
+            return item
+    
     @property
     def num_frames(self) -> int:
         """Number of frames in selected episodes."""
@@ -1900,6 +2054,7 @@ class MultiSameDataset(torch.utils.data.Dataset):
         print(f"uni_res: {self.uni_res}")
         self.uni_res_hw = cfg.uni_res_hw
         self.episodes = None
+        self.policy = cfg.policy.type
         parent_dir = cfg.dataset.root
         # parent_dir = "/mnt/wangxiaofa/robot_dataset/lerobot-format/"
         # parent_dir = "/Data/lerobot_data/real_world"
@@ -2030,6 +2185,157 @@ class MultiSameDataset(torch.utils.data.Dataset):
         else:
             return get_hf_features_from_features(self.features)
     
+    def bimanual_format_actionstate(self, item, dim_act: int = None, norm=False):
+        
+        # 1. 确定维度
+        # 如果 dim_act 为 None，则使用默认值 32
+        current_dim = dim_act if dim_act is not None else 32
+        
+        # 2. 归一化 (基于你的修改)
+        # 这一步现在会修改 item 中的 *源* 张量
+        if norm:
+            state_mean = self.stats["observation.state"]["mean"]
+            state_std = self.stats["observation.state"]["std"]
+            action_mean = self.stats["action"]["mean"]
+            action_std = self.stats["action"]["std"]
+            for idx in GRIPPER_INDEX:
+                state_mean[idx] = 0
+                state_std[idx] = 1
+                action_mean[idx] = 0
+                action_std[idx] = 1
+            item['observation.state'] = (item['observation.state'] - state_mean) / (state_std + 1e-8)
+            item['action'] = (item['action'] - action_mean) / (action_std + 1e-8)
+
+        # 3. 缓存（可能已被归一化的）源张量
+        src_state = item['observation.state']
+        src_action = item['action']
+        
+        # 4. 初始化 *新* 的目标张量
+        state = torch.zeros(current_dim, dtype=torch.float32)
+        action = torch.zeros((src_action.shape[0], current_dim), dtype=torch.float32)
+        
+        # 5. 直接从源切片到目标张量 (消除了所有中间变量)
+        if dim_act is not None:
+            # "xvla" 风格 (使用 orth6d)
+            state[:3] = src_state[:3]       # left_eef_pos
+            state[3:9] = src_state[10:16]   # left_eef_orth6d
+            state[9:10] = src_state[16:17]  # left_gripper
+            state[10:13] = src_state[17:20] # right_eef_pos
+            state[13:19] = src_state[27:33] # right_eef_orth6d
+            state[19:20] = src_state[33:34] # right_gripper
+            
+            action[:, :3] = src_action[:, :3]     # left_act_tran
+            action[:, 3:9] = src_action[:, 10:16] # left_act_orth6d
+            action[:, 9:10] = src_action[:, 16:17] # left_act_gripper
+            action[:, 10:13] = src_action[:, 17:20] # right_act_tran
+            action[:, 13:19] = src_action[:, 27:33] # right_act_orth6d
+            action[:, 19:20] = src_action[:, 33:34] # right_act_gripper
+        else:
+            # "qwen"/"pi0" 风格 (使用 quat/euler, default_dim=32)
+            state[:3] = src_state[:3]       # left_eef_pos
+            state[3:7] = src_state[3:7]     # left_eef_quat
+            state[7:8] = src_state[16:17]   # left_gripper
+            state[8:11] = src_state[17:20]  # right_eef_pos
+            state[11:15] = src_state[20:24] # right_eef_quat
+            state[15:16] = src_state[33:34] # right_gripper
+            
+            action[:, :3] = src_action[:, :3]      # left_act_tran
+            action[:, 3:6] = src_action[:, 7:10]   # left_act_euler
+            action[:, 6:7] = src_action[:, 16:17]  # left_act_gripper
+            action[:, 7:10] = src_action[:, 17:20]  # right_act_tran
+            action[:, 10:13] = src_action[:, 24:27] # right_act_euler
+            action[:, 13:14] = src_action[:, 33:34] # right_act_gripper
+            
+        # 6. 将 *新格式化* 的张量覆盖回 item
+        item["observation.state"] = state
+        item["action"] = action
+        
+        return item
+    
+    def format_item_policywise(self, item, norm=False):
+        """
+        精简版：
+        1. 删除了 "mono" 分支中所有的中间变量。
+        2. 保留了核心的策略路由逻辑。
+        """
+        
+        dataset_type = "bi" if "american_data" in item['dataset_name'] else "mono"
+        
+        if self.policy == "xvla":
+            dim_act = 20
+            if dataset_type == "mono":
+                if norm:
+                    state_mean = self.stats["observation.state"]["mean"]
+                    state_std = self.stats["observation.state"]["std"]
+                    action_mean = self.stats["action"]["mean"]
+                    action_std = self.stats["action"]["std"]
+                    for idx in GRIPPER_INDEX:
+                        state_mean[idx] = 0
+                        state_std[idx] = 1
+                        action_mean[idx] = 0
+                        action_std[idx] = 1
+                    item['observation.state'] = (item['observation.state'] - state_mean) / (state_std + 1e-8)
+                    item['action'] = (item['action'] - action_mean) / (action_std + 1e-8)
+                    
+                # 直接切片赋值，移除 eef_pos, act_tran 等变量
+                src_state = item['observation.state']
+                src_action = item['action']
+                
+                state = torch.zeros(dim_act, dtype=torch.float32)
+                state[:3] = src_state[:3]
+                state[3:9] = src_state[10:16] # eef_orth6d
+                state[9:10] = src_state[16:17] # gripper
+                item['observation.state'] = state
+                
+                action = torch.zeros((src_action.shape[0], dim_act), dtype=torch.float32)
+                action[:, :3] = src_action[:, :3]
+                action[:, 3:9] = src_action[:, 10:16] # act_orth6d
+                action[:, 9:10] = src_action[:, 16:17]  # act_gripper
+                item['action'] = action
+                
+            else: # "bi"
+                item = self.bimanual_format_actionstate(item, norm=norm, dim_act=dim_act)
+            return item
+            
+        elif self.policy == "qwen" or self.policy == "pi0":
+            if dataset_type == "mono":
+                if norm:
+                    state_mean = self.stats["observation.state"]["mean"]
+                    state_std = self.stats["observation.state"]["std"]
+                    action_mean = self.stats["action"]["mean"]
+                    action_std = self.stats["action"]["std"]
+                    for idx in GRIPPER_INDEX:
+                        state_mean[idx] = 0
+                        state_std[idx] = 1
+                        action_mean[idx] = 0
+                        action_std[idx] = 1
+                    item['observation.state'] = (item['observation.state'] - state_mean) / (state_std + 1e-8)
+                    item['action'] = (item['action'] - action_mean) / (action_std + 1e-8)
+                
+                # 直接切片赋值
+                src_state = item['observation.state']
+                src_action = item['action']
+                
+                state = torch.zeros(8, dtype=torch.float32) # dim_state = 8
+                state[:3] = src_state[:3]
+                state[3:7] = src_state[3:7]   # eef_quat
+                state[7:8] = src_state[16:17] # gripper
+                item['observation.state'] = state
+                
+                action = torch.zeros((src_action.shape[0], 7), dtype=torch.float32) # dim_act = 7
+                action[:, :3] = src_action[:, :3]
+                action[:, 3:6] = src_action[:, 7:10]  # act_euler
+                action[:, 6:7] = src_action[:, 16:17] # act_gripper
+                item['action'] = action
+                
+            else: # "bi"
+                # 注意：这里调用 bimanual 时不传递 dim_act，使其使用默认值 None -> 32
+                item = self.bimanual_format_actionstate(item, norm=norm)
+            return item
+            
+        else:
+            return item
+    
     def __getitem__(self, index):
         dim_act =20
         item = self.dataset[index]
@@ -2037,29 +2343,7 @@ class MultiSameDataset(torch.utils.data.Dataset):
         dataset_name = item["dataset_name"]
         
         # State & Action Unify
-        state = torch.zeros(dim_act, dtype=torch.float32)
-        eef_pos = item['observation.state'][:3]
-        eef_quat = item['observation.state'][3:7]
-        eef_orth6d = quaternion_to_ortho6d(eef_quat)
-        gripper = item['observation.state'][7:8]
-        
-        state[:3] = eef_pos
-        state[3:9] = eef_orth6d
-        state[9:10] = gripper
-        item['observation.state'] = state
-        
-        chunk_size = item['action'].shape[0]
-        action = torch.zeros((chunk_size, dim_act), dtype=torch.float32)
-        act_tran = item['action'][:, :3]
-        act_rot = item['action'][:, 3:6]
-        
-        act_gripper = item['action'][:, 6:7]
-        act_orth6d = euler_to_ortho6d(act_rot)
-        
-        action[:, :3] = act_tran
-        action[:, 3:9] = act_orth6d
-        action[:, 9:10] = act_gripper
-        item['action'] = action
+        item = self.format_item_policywise(item, norm=True)
 
         data_config = OXE_DATASET_CONFIGS[dataset_name]
         image_obs_keys = data_config["image_obs_keys"]

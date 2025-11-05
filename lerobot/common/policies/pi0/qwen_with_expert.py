@@ -717,16 +717,18 @@ class PaliGemmaWithExpertModel(PreTrainedModel):
         self.kv_repre = self.kv_repre.to(dtype=torch.bfloat16)
         self.kv_mask = self.kv_mask.to(dtype=torch.bfloat16)
         
-        params_to_change_dtype = [
-            "norm",
-            "kv_mask",
-            # "visual",
-            # "multi_modal",
-        ]
-        for name, param in self.named_parameters():
-            if any(selector in name for selector in params_to_change_dtype):
-                print(f"Setting {name} to float32")
-                param.data = param.data.to(dtype=torch.float32)
+        # Set corresponding modules to float32
+        
+        # params_to_change_dtype = [
+        #     "norm",
+        #     "kv_mask",
+        #     # "visual",
+        #     # "multi_modal",
+        # ]
+        # for name, param in self.named_parameters():
+        #     if any(selector in name for selector in params_to_change_dtype):
+        #         print(f"Setting {name} to float32")
+        #         param.data = param.data.to(dtype=torch.float32)
         # self.paligemma = self.paligemma.to(dtype=torch.bfloat16)
 
         # params_to_change_dtype = [

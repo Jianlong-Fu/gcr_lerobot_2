@@ -212,15 +212,23 @@ def aggregate_multi_stats(ls_datasets: list, data_names: list, max_dim: int) -> 
                             ds.meta.stats[data_key][stat_key] = torch.from_numpy(ds.meta.stats[data_key][stat_key])
     if max_dim:
         import torch.nn.functional as F
+        actual_max = max_dim
+        for data_key in data_keys:
+            for stat_key in ["mean", "std", "min", "max"]:
+                if "state" in data_key or "action" in data_key:
+                        for ds in ls_datasets:
+                            cur_dim = ds.meta.stats[data_key][stat_key].shape[0]
+                            if cur_dim > actual_max:
+                                actual_max = cur_dim
         for data_key in data_keys:
             for stat_key in ["mean", "std", "min", "max"]:
                 if "state" in data_key or "action" in data_key:
                         for ds in ls_datasets:
                             cur_dim = ds.meta.stats[data_key][stat_key].shape[0]
                             if stat_key != "std":
-                                ds.meta.stats[data_key][stat_key] = F.pad(ds.meta.stats[data_key][stat_key], (0, max_dim - cur_dim), mode='constant', value=0)
+                                ds.meta.stats[data_key][stat_key] = F.pad(ds.meta.stats[data_key][stat_key], (0, actual_max - cur_dim), mode='constant', value=0)
                             else:
-                                ds.meta.stats[data_key][stat_key] = F.pad(ds.meta.stats[data_key][stat_key], (0, max_dim - cur_dim), mode='constant', value=1)
+                                ds.meta.stats[data_key][stat_key] = F.pad(ds.meta.stats[data_key][stat_key], (0, actual_max - cur_dim), mode='constant', value=1)
                             # print(cur_dim, ds.meta.stats[data_key][stat_key].shape)
     for data_key in data_keys:
         for stat_key in ["min", "max"]:
