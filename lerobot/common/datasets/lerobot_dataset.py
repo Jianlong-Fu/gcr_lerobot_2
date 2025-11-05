@@ -1923,17 +1923,17 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         else:
             # "qwen"/"pi0" 风格 (使用 quat/euler, default_dim=32)
             state[:3] = src_state[:3]       # left_eef_pos
-            state[3:7] = src_state[3:7]     # left_eef_quat
+            state[3:7] = src_state[6:10]     # left_eef_quat
             state[7:8] = src_state[16:17]   # left_gripper
             state[8:11] = src_state[17:20]  # right_eef_pos
-            state[11:15] = src_state[20:24] # right_eef_quat
+            state[11:15] = src_state[23:27] # right_eef_quat
             state[15:16] = src_state[33:34] # right_gripper
             
             action[:, :3] = src_action[:, :3]      # left_act_tran
-            action[:, 3:6] = src_action[:, 7:10]   # left_act_euler
+            action[:, 3:6] = src_action[:, 3:6]   # left_act_euler
             action[:, 6:7] = src_action[:, 16:17]  # left_act_gripper
             action[:, 7:10] = src_action[:, 17:20]  # right_act_tran
-            action[:, 10:13] = src_action[:, 24:27] # right_act_euler
+            action[:, 10:13] = src_action[:, 20:23] # right_act_euler
             action[:, 13:14] = src_action[:, 33:34] # right_act_gripper
             
         # 6. 将 *新格式化* 的张量覆盖回 item
@@ -2008,13 +2008,13 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
                 
                 state = torch.zeros(8, dtype=torch.float32) # dim_state = 8
                 state[:3] = src_state[:3]
-                state[3:7] = src_state[3:7]   # eef_quat
+                state[3:7] = src_state[6:10]   # eef_quat
                 state[7:8] = src_state[16:17] # gripper
                 item['observation.state'] = state
                 
                 action = torch.zeros((src_action.shape[0], 7), dtype=torch.float32) # dim_act = 7
                 action[:, :3] = src_action[:, :3]
-                action[:, 3:6] = src_action[:, 7:10]  # act_euler
+                action[:, 3:6] = src_action[:, 3:6]  # act_euler
                 action[:, 6:7] = src_action[:, 16:17] # act_gripper
                 item['action'] = action
                 
@@ -2233,17 +2233,17 @@ class MultiSameDataset(torch.utils.data.Dataset):
         else:
             # "qwen"/"pi0" 风格 (使用 quat/euler, default_dim=32)
             state[:3] = src_state[:3]       # left_eef_pos
-            state[3:7] = src_state[3:7]     # left_eef_quat
+            state[3:7] = src_state[6:10]     # left_eef_quat
             state[7:8] = src_state[16:17]   # left_gripper
             state[8:11] = src_state[17:20]  # right_eef_pos
-            state[11:15] = src_state[20:24] # right_eef_quat
+            state[11:15] = src_state[23:27] # right_eef_quat
             state[15:16] = src_state[33:34] # right_gripper
             
             action[:, :3] = src_action[:, :3]      # left_act_tran
-            action[:, 3:6] = src_action[:, 7:10]   # left_act_euler
+            action[:, 3:6] = src_action[:, 3:6]   # left_act_euler
             action[:, 6:7] = src_action[:, 16:17]  # left_act_gripper
             action[:, 7:10] = src_action[:, 17:20]  # right_act_tran
-            action[:, 10:13] = src_action[:, 24:27] # right_act_euler
+            action[:, 10:13] = src_action[:, 20:23] # right_act_euler
             action[:, 13:14] = src_action[:, 33:34] # right_act_gripper
             
         # 6. 将 *新格式化* 的张量覆盖回 item
@@ -2318,13 +2318,13 @@ class MultiSameDataset(torch.utils.data.Dataset):
                 
                 state = torch.zeros(8, dtype=torch.float32) # dim_state = 8
                 state[:3] = src_state[:3]
-                state[3:7] = src_state[3:7]   # eef_quat
+                state[3:7] = src_state[6:10]   # eef_quat
                 state[7:8] = src_state[16:17] # gripper
                 item['observation.state'] = state
                 
                 action = torch.zeros((src_action.shape[0], 7), dtype=torch.float32) # dim_act = 7
                 action[:, :3] = src_action[:, :3]
-                action[:, 3:6] = src_action[:, 7:10]  # act_euler
+                action[:, 3:6] = src_action[:, 3:6]  # act_euler
                 action[:, 6:7] = src_action[:, 16:17] # act_gripper
                 item['action'] = action
                 

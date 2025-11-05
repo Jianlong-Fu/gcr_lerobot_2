@@ -23,6 +23,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar
 
+import math
+import mmap
 import numpy as np
 import pyarrow as pa
 import torch
@@ -30,7 +32,7 @@ import torchvision
 from datasets.features.features import register_feature
 from typing import List
 from PIL import Image
-from joblib import Parallel, delayed, cpu_count
+from concurrent.futures import ThreadPoolExecutor
 
 def split_indices(indices: List[int], num_chunks: int) -> List[List[int]]:
     """Split a list of indices into approximately equal chunks."""
@@ -52,6 +54,12 @@ def decode_frame_torchcodec(
     frames = decoder.get_frames_at(indices)
     return frames
 
+def convert_to_giventype(data: torch.Tensor, type: int = 1):
+    npimg = data.cpu().numpy()
+    if npimg.shape[0] in (1, 3, 4):
+        npimg = np.transpose(npimg, (1, 2, 0))
+    return Image.fromarray(npimg) if type else npimg
+
 def decode_video_frames_torchcodec(
     video_path: Path | str,
     timestamps: list[float],
@@ -68,21 +76,42 @@ def decode_video_frames_torchcodec(
     frame_duration = 1 / decoder.metadata.average_fps
     
     if not return_all:
-        frame_list = [round(ts / frame_duration) for ts in timestamps]
+        frame_list = [math.ceil(ts / frame_duration) for ts in timestamps]
         frame_list.sort()
     else:
         max_ts = max(timestamps)
-        max_tx_frame = round(max_ts / frame_duration)
-        frame_list = np.arange(0, max_tx_frame, 1).tolist()
+        max_tx_frame = math.ceil(max_ts / frame_duration)
+        frame_list = np.arange(0, max_tx_frame+1, 1).tolist()
     if worker_count == 1:
         frames = decoder.get_frames_at(frame_list)
+        frames = frames.data
     else:
         chunks = split_indices(frame_list, num_chunks=worker_count)
-        results = Parallel(n_jobs=worker_count, prefer='threads', verbose=0)(
-            delayed(decode_frame_torchcodec)(raw_bytes, chunk) for chunk in chunks
-        )
+        results = []
+        with ThreadPoolExecutor(max_workers=worker_count) as executor:
+            futures = [
+               executor.submit(decode_frame_torchcodec, raw_bytes, chunk) 
+               for chunk in chunks
+            ]
+            for f in futures:
+               results.append(f.result())
         frames = torch.cat([frame_batch.data for frame_batch in results], dim=0)
-    return frames
+        
+        
+    if return_type == "tensor":
+        return frames
+    elif return_type == "image" or return_type == "numpy":
+        actual_type = 1 if return_type == "image" else 0
+        to_convert = [(frames[idx], actual_type) for idx in range(frames.shape[0])]
+        image_list = []
+        with ThreadPoolExecutor(max_workers=worker_count) as conv_exe:
+            futures = [conv_exe.submit(convert_to_giventype, data, actual_type) for data, actual_type in to_convert]
+            for fut in futures:
+                image_list.append(fut.result())
+        return image_list
+    else:
+        raise ValueError(f"Unknown return_type: {return_type}")
+    
 
 def decode_video_frames_torchvision(
     video_path: Path | str,

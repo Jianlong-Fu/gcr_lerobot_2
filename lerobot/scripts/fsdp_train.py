@@ -528,9 +528,7 @@ def train(cfg: TrainPipelineConfig):
         sync_flag = (step % cfg.gradient_accumulation_steps == 0)
         batch_start = time.perf_counter()
         batch = next(dataloader_iter)
-        for key, value in batch.items():
-            if isinstance(value, torch.Tensor):
-                print(f"key: {key}, value: {value.shape}")
+        
         data_time = time.perf_counter() - batch_start
         dataloading_s += data_time
         
@@ -551,55 +549,7 @@ def train(cfg: TrainPipelineConfig):
             torch.cuda.empty_cache()
             
             # with FSDP.summon_full_params(model):
-            grad_list = []
-            grad_missing_name = []
-            rank_1_with_grad = []
-            for name, p in policy.named_parameters():
-                # print(name)
-                
-                if "20" in name:
-                # if "10" in name and "k_mask" in name:
-                    # print(name)
-                    if rank == 1:
-                        if p.requires_grad:
-                            if p.grad is not None:
-                                rank_1_with_grad.append(name)
-                                
-                    if rank == 0:
-                        if p.requires_grad:
-                            if p.grad is None:
-                                grad_missing_name.append(name)
-                            else:
-                                grad_list.append(p.grad.abs().mean().item())
-                                if "k_mask" in name:
-                                    logger.info(f"{p}")
-                        # print(name)
-                        # print(p.grad.abs().max().item())
-            if rank == 0:
-                for name in rank_1_with_grad:
-                    if name in grad_missing_name:
-                        grad_missing_name.remove(name)
-                wo_bias_name = [name for name in grad_missing_name if "bias" not in name]
-                grad_missing_name = [name.replace("_fsdp_wrapped_module.", "") for name in wo_bias_name]
-                grad_list = np.asanyarray(grad_list)
-                print(f"Max grad: {grad_list.max():.4g}, Mean grad: {grad_list.mean():.4g}, Mid grad: {np.median(grad_list):.4g}, Min grad: {grad_list.min():.4g}")
-                print(f"Grad missing: {grad_missing_name}")
-                # if "26" in name and "k_mask" in name:
-                #     if rank == 0:
-                #         print("model.paligemma_with_expert.kv_mask.26.k_mask: \n", p)
-                #         print("k_mask.grad max:", p.grad)
-                # if "26" in name and "k_norm" in name and "weight" in name:
-                #     if rank == 0:
-                #         # print("model.paligemma_with_expert.kv_norm.26.k_norm.weight: \n", p)
-                #         print("\n==========================================================\n")
-            # for name, p in model.named_parameters():
-            #     if p.grad is not None:
-            #         print(name, "param", p.dtype, "grad", p.grad.dtype)
-            # # 查看 optimizer state dtype
-            # for p, st in optimizer.state.items():
-            #     if "exp_avg" in st:
-            #         print("param dtype", p.dtype, "exp_avg dtype", st["exp_avg"].dtype)
-            #         break
+            
             optim_start = time.perf_counter()
             
             for name, p in model.named_parameters():
@@ -629,27 +579,6 @@ def train(cfg: TrainPipelineConfig):
             # print(f"{'Parameter Name':<60} {'Momentum (exp_avg) Shape':<20} {'Variance (exp_avg_sq) Shape':<20}")
             if rank == 0:
                 print("="*100)
-            
-            for group in optimizer.param_groups:
-                for param in group['params']:
-                    if param.grad is not None:
-                        if param in optimizer.state:
-                            state = optimizer.state[param]
-                            # 获取参数名
-                            param_name = param_to_name.get(param, "Unnamed Parameter")
-                            momentum = state.get('exp_avg', None)
-                            variance = state.get('exp_avg_sq', None)
-                            momentum_shape = momentum.shape if momentum is not None else "N/A"
-                            variance_shape = variance.shape if variance is not None else "N/A"
-                            param_name = param_name.replace("_fsdp_wrapped_module.", "_f.")
-                            if "kv_mask" in param_name:
-                                param_name = param_name.replace("_f.model._f.paligemma_with_expert._f.", "")
-                                # print(f"{param_name:<60} {str(momentum_shape):<20} {str(variance_shape):<20}")
-                        else:
-                            param_name = param_to_name.get(param, "Unnamed Parameter")
-                            param_name = param_name.replace("_fsdp_wrapped_module.", "_f.")
-                            # if "kv_mask" in param_name:
-                                # print(f"{param_name:<60} {'State not found':<20} {'State not found':<20}")
 
             optimizer.zero_grad(set_to_none=True)
             optim_time = time.perf_counter() - optim_start
