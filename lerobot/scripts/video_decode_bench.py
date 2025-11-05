@@ -16,7 +16,7 @@ if __name__ == "__main__":
     diff = []
     total_start = time.time() 
     timestamps = [17.6500]
-    for i in range(10):
+    for i in range(1):
         start = time.time()
         frames = decode_video_frames_torchcodec(video_path, timestamps, tolerance_s=1e-4, return_all=True, worker_count=16, return_type='numpy')
         print(f"torchcodec: {time.time() - start}")

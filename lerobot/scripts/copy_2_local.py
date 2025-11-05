@@ -94,8 +94,8 @@ def recursive_copy_with_progress(src_root: str, dst_root: str, max_workers: int 
 
 if __name__ == "__main__":
     # 配置路径
-    directory_A = "/mnt/wangxiaofa/robot_dataset/lerobot-format/aloha-taskbox_lerobot/"  # blobfuse挂载的源目录
-    directory_B = "/scratch/amlt_code/gcr_lerobot_2/robot_dataset/lerobot-format/aloha-taskbox_lerobot/"         # 本地目标目录
+    directory_A = "/mnt/wangxiaofa/robot_dataset/lerobot-format/aloha-busybox_lerobot_v2_1_combined_new/"  # blobfuse挂载的源目录
+    directory_B = "/scratch/amlt_code/gcr_lerobot_2/robot_dataset/lerobot-format/aloha-busybox_lerobot_v2_1_combined_new/"         # 本地目标目录
     
     # 调整线程数（根据实际环境优化）
     MAX_WORKERS = 32  # 云环境建议 16-32，普通PC建议 8-16

@@ -99,6 +99,7 @@ from lerobot.common.datasets.video_utils import (
     decode_video_frames_torchvision,
     encode_video_frames,
     get_video_info,
+    decode_video_frames_torchcodec
 )
 from lerobot.common.robot_devices.robots.utils import Robot
 from lerobot.configs import parser
@@ -817,15 +818,19 @@ class LeRobotDataset(torch.utils.data.Dataset):
             video_path = self.root / self.meta.get_video_file_path(ep_idx, vid_key)
             if vid_key == primary_obs_key:
                 # print(vid_key)
-                frames = decode_video_frames_torchvision(
-                    video_path, query_ts, self.tolerance_s, self.video_backend, return_all=True, return_type="image"
+                frames = decode_video_frames_torchcodec(
+                    video_path, query_ts, self.tolerance_s, return_all=True, return_type="image", worker_count=16
                 )
-                # frames = [frame.resize((112, 112)) for frame in frames]
-                # item[vid_key] = frames
+                # frames = decode_video_frames_torchvision(
+                #     video_path, query_ts, self.tolerance_s, self.video_backend, return_all=True, return_type="image"
+                # )
             else:
-                frames = decode_video_frames_torchvision(
-                    video_path, query_ts, self.tolerance_s, self.video_backend, return_type="image"
+                frames = decode_video_frames_torchcodec(
+                    video_path, query_ts, self.tolerance_s, return_all=False, return_type="image"
                 )
+                # frames = decode_video_frames_torchvision(
+                #     video_path, query_ts, self.tolerance_s, self.video_backend, return_type="image"
+                # )
             # item[vid_key] = frames.squeeze(0)
             item[vid_key] = frames
 

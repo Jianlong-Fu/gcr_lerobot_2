@@ -73,15 +73,16 @@ def decode_video_frames_torchcodec(
     with open(video_path, "rb") as f:
         raw_bytes = f.read()
     decoder = VideoDecoder(raw_bytes, seek_mode="approximate")
+    total_frames = decoder.metadata.num_frames
     frame_duration = 1 / decoder.metadata.average_fps
     
     if not return_all:
-        frame_list = [math.ceil(ts / frame_duration) for ts in timestamps]
+        frame_list = [min(math.ceil(ts / frame_duration), total_frames-1) for ts in timestamps]
         frame_list.sort()
     else:
         max_ts = max(timestamps)
         max_tx_frame = math.ceil(max_ts / frame_duration)
-        frame_list = np.arange(0, max_tx_frame+1, 1).tolist()
+        frame_list = np.arange(0, min(max_tx_frame+1, total_frames), 1).tolist()
     if worker_count == 1:
         frames = decoder.get_frames_at(frame_list)
         frames = frames.data

@@ -4,6 +4,7 @@ torchrun --nnodes=1 \
     --policy.type="qwen" \
     --output_dir="/data_16T/deepseek/0529" \
     --save_freq=10000 \
+    --log_freq=10 \
     --dataset.image_transforms.enable=false \
     --batch_size=2 \
     --dataset.repo_id="whatever" \

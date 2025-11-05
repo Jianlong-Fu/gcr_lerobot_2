@@ -6,6 +6,7 @@ NPROC_PER_NODE=2
 JOB_NAME=""
 JOB_TYPE="pretrain"
 DATA_MIX="oxe_magic_soup_plus"
+BATCH_SIZE=32
 OPTIMIZER_LR=2.5e-5
 OPTIMIZER_DECAY_LR=2.5e-6
 OPTIMIZER_WEIGHT_DECAY=1e-2
@@ -58,6 +59,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --save_freq)
             SAVE_FREQ="$2"
+            shift 2
+            ;;
+        --batch_size)
+            BATCH_SIZE="$2"
             shift 2
             ;;
         --optimizer_lr)
@@ -140,13 +145,13 @@ torchrun \
     --output_dir="$FIXED_OUTPUT_DIR" \
     --dataset.repo_id="whatever" \
     --dataset.image_transforms.enable=$IMAGE_AUG \
-    --batch_size=128 \
-    --log_freq=20 \
+    --batch_size=$BATCH_SIZE \
+    --log_freq=100 \
     --save_freq=$SAVE_FREQ \
     --gradient_accumulation_steps=$GRADIENT_ACCUMULATION_STEPS \
     --data_mix=$DATA_MIX \
     --dataset.processor="/mnt/wangxiaofa/qwen_params/Qwen2.5-VL-7B-Instruct/" \
-    --dataset.parent_dir="/mnt/wangxiaofa/robot_dataset/lerobot-format/" \
+    --dataset.parent_dir="/scratch/amlt_code/gcr_lerobot_2/robot_dataset/lerobot-format/" \
     --policy.scheduler_warmup_steps=$SCHEDULER_WARMUP_STEPS \
     --policy.scheduler_decay_steps=$SCHEDULER_DECAY_STEPS \
     --policy.scheduler_platform_steps=$SCHEDULER_PLATFORM_STEPS \
