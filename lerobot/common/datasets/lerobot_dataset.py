@@ -819,14 +819,14 @@ class LeRobotDataset(torch.utils.data.Dataset):
             if vid_key == primary_obs_key:
                 # print(vid_key)
                 frames = decode_video_frames_torchcodec(
-                    video_path, query_ts, self.tolerance_s, return_all=True, return_type="tensor", worker_count=16
+                    video_path, query_ts, self.tolerance_s, return_all=True, return_type="image", worker_count=16
                 )
                 # frames = decode_video_frames_torchvision(
                 #     video_path, query_ts, self.tolerance_s, self.video_backend, return_all=True, return_type="image"
                 # )
             else:
                 frames = decode_video_frames_torchcodec(
-                    video_path, query_ts, self.tolerance_s, return_all=False, return_type="tensor"
+                    video_path, query_ts, self.tolerance_s, return_all=False, return_type="image"
                 )
                 # frames = decode_video_frames_torchvision(
                 #     video_path, query_ts, self.tolerance_s, self.video_backend, return_type="image"
@@ -1898,6 +1898,12 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
                 state_std[idx] = 1
                 action_mean[idx] = 0
                 action_std[idx] = 1
+            state_shape = item['observation.state'].shape
+            state_mean = state_mean[:state_shape[0]]
+            state_std = state_std[:state_shape[0]]
+            action_shape = item['action'].shape
+            action_mean = action_mean[:action_shape[1]]
+            action_std = action_std[:action_shape[1]]
             item['observation.state'] = (item['observation.state'] - state_mean) / (state_std + 1e-8)
             item['action'] = (item['action'] - action_mean) / (action_std + 1e-8)
 
@@ -1964,11 +1970,17 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
                     state_std = self.stats["observation.state"]["std"]
                     action_mean = self.stats["action"]["mean"]
                     action_std = self.stats["action"]["std"]
-                    for idx in GRIPPER_INDEX:
+                    for idx in [GRIPPER_INDEX[0]]:
                         state_mean[idx] = 0
                         state_std[idx] = 1
                         action_mean[idx] = 0
                         action_std[idx] = 1
+                    state_shape = item['observation.state'].shape
+                    state_mean = state_mean[:state_shape[0]]
+                    state_std = state_std[:state_shape[0]]
+                    action_shape = item['action'].shape
+                    action_mean = action_mean[:action_shape[1]]
+                    action_std = action_std[:action_shape[1]]
                     item['observation.state'] = (item['observation.state'] - state_mean) / (state_std + 1e-8)
                     item['action'] = (item['action'] - action_mean) / (action_std + 1e-8)
                     
@@ -1999,11 +2011,17 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
                     state_std = self.stats["observation.state"]["std"]
                     action_mean = self.stats["action"]["mean"]
                     action_std = self.stats["action"]["std"]
-                    for idx in GRIPPER_INDEX:
+                    for idx in [GRIPPER_INDEX[0]]:
                         state_mean[idx] = 0
                         state_std[idx] = 1
                         action_mean[idx] = 0
                         action_std[idx] = 1
+                    state_shape = item['observation.state'].shape
+                    state_mean = state_mean[:state_shape[0]]
+                    state_std = state_std[:state_shape[0]]
+                    action_shape = item['action'].shape
+                    action_mean = action_mean[:action_shape[1]]
+                    action_std = action_std[:action_shape[1]]
                     item['observation.state'] = (item['observation.state'] - state_mean) / (state_std + 1e-8)
                     item['action'] = (item['action'] - action_mean) / (action_std + 1e-8)
                     
@@ -2208,6 +2226,12 @@ class MultiSameDataset(torch.utils.data.Dataset):
                 state_std[idx] = 1
                 action_mean[idx] = 0
                 action_std[idx] = 1
+            state_shape = item['observation.state'].shape
+            state_mean = state_mean[:state_shape[0]]
+            state_std = state_std[:state_shape[0]]
+            action_shape = item['action'].shape
+            action_mean = action_mean[:action_shape[1]]
+            action_std = action_std[:action_shape[1]]
             item['observation.state'] = (item['observation.state'] - state_mean) / (state_std + 1e-8)
             item['action'] = (item['action'] - action_mean) / (action_std + 1e-8)
 
@@ -2274,11 +2298,17 @@ class MultiSameDataset(torch.utils.data.Dataset):
                     state_std = self.stats["observation.state"]["std"]
                     action_mean = self.stats["action"]["mean"]
                     action_std = self.stats["action"]["std"]
-                    for idx in GRIPPER_INDEX:
+                    for idx in [GRIPPER_INDEX[0]]:
                         state_mean[idx] = 0
                         state_std[idx] = 1
                         action_mean[idx] = 0
                         action_std[idx] = 1
+                    state_shape = item['observation.state'].shape
+                    state_mean = state_mean[:state_shape[0]]
+                    state_std = state_std[:state_shape[0]]
+                    action_shape = item['action'].shape
+                    action_mean = action_mean[:action_shape[1]]
+                    action_std = action_std[:action_shape[1]]
                     item['observation.state'] = (item['observation.state'] - state_mean) / (state_std + 1e-8)
                     item['action'] = (item['action'] - action_mean) / (action_std + 1e-8)
                     
@@ -2309,11 +2339,17 @@ class MultiSameDataset(torch.utils.data.Dataset):
                     state_std = self.stats["observation.state"]["std"]
                     action_mean = self.stats["action"]["mean"]
                     action_std = self.stats["action"]["std"]
-                    for idx in GRIPPER_INDEX:
+                    for idx in [GRIPPER_INDEX[0]]:
                         state_mean[idx] = 0
                         state_std[idx] = 1
                         action_mean[idx] = 0
                         action_std[idx] = 1
+                    state_shape = item['observation.state'].shape
+                    state_mean = state_mean[:state_shape[0]]
+                    state_std = state_std[:state_shape[0]]
+                    action_shape = item['action'].shape
+                    action_mean = action_mean[:action_shape[1]]
+                    action_std = action_std[:action_shape[1]]
                     item['observation.state'] = (item['observation.state'] - state_mean) / (state_std + 1e-8)
                     item['action'] = (item['action'] - action_mean) / (action_std + 1e-8)
                 

@@ -220,6 +220,7 @@ def aggregate_multi_stats(ls_datasets: list, data_names: list, max_dim: int) -> 
                             cur_dim = ds.meta.stats[data_key][stat_key].shape[0]
                             if cur_dim > actual_max:
                                 actual_max = cur_dim
+        # print(f"actual max dim is: {actual_max}")
         for data_key in data_keys:
             for stat_key in ["mean", "std", "min", "max"]:
                 if "state" in data_key or "action" in data_key:
