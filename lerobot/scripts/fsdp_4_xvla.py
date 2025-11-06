@@ -168,6 +168,9 @@ def train_step(model, batch, scaler, cfg, sync_flag):
         
         if sync_flag:
             loss_dict = model(batch)
+            for key, value in loss_dict.items():
+                print(f"loss_dict[{key}] = {value}")
+            print("\n" + "*"*100 + "\n")
             loss = sum(loss_dict.values())
             # loss, output_dict = model(batch)
             loss = loss / cfg.gradient_accumulation_steps

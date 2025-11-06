@@ -168,6 +168,7 @@ def train_step(model, batch, scaler, cfg, sync_flag):
         
         if sync_flag:
             loss, output_dict = model(batch)
+            
             loss = loss / cfg.gradient_accumulation_steps
             # 反向传播
             if scaler is not None:
@@ -197,33 +198,33 @@ def train_step(model, batch, scaler, cfg, sync_flag):
 @parser.wrap()
 def train(cfg: TrainPipelineConfig):
     # 初始化分布式环境
-    world_size = int(os.environ["WORLD_SIZE"])
-    local_rank = int(os.environ["LOCAL_RANK"])
-    world_rank = int(os.environ["RANK"])
-    node_rank = int(os.environ["NODE_RANK"])
-    master_ip = os.environ["MASTER_ADDR"]
-    master_port = os.environ["MASTER_PORT"]
-    master_uri = "tcp://%s:%s" % (master_ip, master_port)
-    rank = world_rank
-    dist.init_process_group(
-        backend="nccl",
-        init_method=master_uri,
-        world_size=world_size,
-        timeout=timedelta(minutes=60),
-        rank=world_rank,
-    )
+    # world_size = int(os.environ["WORLD_SIZE"])
+    # local_rank = int(os.environ["LOCAL_RANK"])
+    # world_rank = int(os.environ["RANK"])
+    # node_rank = int(os.environ["NODE_RANK"])
+    # master_ip = os.environ["MASTER_ADDR"]
+    # master_port = os.environ["MASTER_PORT"]
+    # master_uri = "tcp://%s:%s" % (master_ip, master_port)
+    # rank = world_rank
+    # dist.init_process_group(
+    #     backend="nccl",
+    #     init_method=master_uri,
+    #     world_size=world_size,
+    #     timeout=timedelta(minutes=60),
+    #     rank=world_rank,
+    # )
     
-    # dist.init_process_group(backend="nccl")
-    # rank = dist.get_rank()
-    # world_size = dist.get_world_size()
-    # local_rank = rank
+    dist.init_process_group(backend="nccl")
+    rank = dist.get_rank()
+    world_size = dist.get_world_size()
+    local_rank = rank
     
     torch.cuda.set_device(local_rank)
     
     # 初始化配置
     cfg.validate()
     logger = init_logger(cfg, rank)
-    logger.info(f"DIST INFO: world_size={world_size}, local_rank={local_rank}, world_rank={world_rank}, node_rank={node_rank}, master_uri={master_uri}")
+    # logger.info(f"DIST INFO: world_size={world_size}, local_rank={local_rank}, world_rank={world_rank}, node_rank={node_rank}, master_uri={master_uri}")
     
     if rank == 0:
         logger.info(pformat(cfg.to_dict()))
@@ -448,6 +449,9 @@ def train(cfg: TrainPipelineConfig):
     # Metrics setup
     train_metrics = {
         "loss": AverageMeter("loss", ":.4f"),
+        "pos_loss": AverageMeter("loss", ":.4f"),
+        "rot_loss": AverageMeter("loss", ":.4f"),
+        "grip_loss": AverageMeter("loss", ":.4f"),
         "grad_norm": AverageMeter("grdn", ":.4f"),
         "lr": AverageMeter("lr", ":0.01e"),
         "update_s": AverageMeter("updt_s", ":.3f"),
@@ -473,6 +477,10 @@ def train(cfg: TrainPipelineConfig):
     dataloading_s = 0.0
     grad_norm_value = 0.0
     loss_value = 0.0
+    pos_loss_value = 0.0
+    rot_loss_value = 0.0
+    grip_loss_value = 0.0
+    
     
     dataloader_iter = cycle(dataloader)
     
@@ -539,7 +547,10 @@ def train(cfg: TrainPipelineConfig):
         grad_to_record = grad_norm.item() if grad_norm is not None else 0.0
         grad_norm_value += grad_to_record
         loss_value += loss.detach().mean().item()
-            
+        pos_loss_value += outputs["pos_loss"].detach().mean().item()
+        rot_loss_value += outputs["rot_loss"].detach().mean().item()
+        grip_loss_value += outputs["gripper_loss"].detach().mean().item()
+
         step_time = time.perf_counter() - step_start
         fwd_bwd_time += step_time
         
@@ -588,6 +599,9 @@ def train(cfg: TrainPipelineConfig):
             train_tracker.dataloading_s = dataloading_s
             train_tracker.update_s = fwd_bwd_time
             train_tracker.loss = loss_value
+            train_tracker.pos_loss = pos_loss_value
+            train_tracker.rot_loss = rot_loss_value
+            train_tracker.grip_loss = grip_loss_value
             train_tracker.grad_norm = grad_norm_value
             train_tracker.lr = optimizer.param_groups[0]["lr"]
             train_tracker.step()
@@ -595,6 +609,9 @@ def train(cfg: TrainPipelineConfig):
             fwd_bwd_time = 0.0
             dataloading_s = 0.0
             loss_value = 0.0
+            pos_loss_value = 0.0
+            rot_loss_value = 0.0
+            grip_loss_value = 0.0
             grad_norm_value = 0.0
             
             # 学习率调度

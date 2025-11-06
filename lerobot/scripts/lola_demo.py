@@ -9,6 +9,7 @@ import transformers
 import numpy as np
 import copy
 
+from torch.nn import functional as F
 from torchvision import transforms
 from PIL import Image
 from tqdm import tqdm
@@ -197,7 +198,7 @@ def main(cfg: TrainPipelineConfig):
     obs_seq_len = 3
     path_2_load = "/data_16T/deepseek/qwen_flow/161/step10000.pt"
     cfg.policy.qwen_path = "/datassd_1T/qwen25vl/Qwen2.5-VL-7B-Instruct/"
-    device = "cuda:1"
+    device = "cuda:0"
     
     image_transforms = (ImageTransforms(cfg.dataset.image_transforms))
     seed = cfg.seed
@@ -206,14 +207,17 @@ def main(cfg: TrainPipelineConfig):
         image_transforms=image_transforms,
         seed=seed,
         data_mix=cfg.data_mix,
-        vla2root_json="pizza.json",
+        vla2root_json="vla2root.json",
     )
-    action_mean = dataset.stats["action"]["mean"]
-    action_std = dataset.stats["action"]["std"]
+    ACT_IDX = [0,1,2,3,4,5,16,17,18,19,20,21,22,33]
+    STATE_IDX = [0,1,2,6,7,8,9,16,17,18,19,23,24,25,26,33]
+    action_mean = F.pad(dataset.stats["action"]["mean"][ACT_IDX], (0, 32 - dataset.stats["action"]["mean"][ACT_IDX].shape[0]))
+    action_std = F.pad(dataset.stats["action"]["std"][ACT_IDX], (0, 32 - dataset.stats["action"]["std"][ACT_IDX].shape[0]))
+    
     print("Action Meta: \n", action_mean, action_std)
     
-    state_mean = dataset.stats["observation.state"]["mean"]
-    state_std = dataset.stats["observation.state"]["std"]
+    state_mean = F.pad(dataset.stats["observation.state"]["mean"][STATE_IDX], (0, 32 - dataset.stats["observation.state"]["mean"][STATE_IDX].shape[0]))
+    state_std = F.pad(dataset.stats["observation.state"]["std"][STATE_IDX], (0, 32 - dataset.stats["observation.state"]["std"][STATE_IDX].shape[0]))
     
     processor = dataset.processor
     
@@ -255,7 +259,7 @@ def main(cfg: TrainPipelineConfig):
         "task": "Pick up the apple.",
     }
     
-    simulation_data['primary'] = [sim_image for idx in range(obs_seq_len)]
+    simulation_data['primary'] = [sim_image for _ in range(obs_seq_len)]
     simulation_data['secondary'] = sim_image
     simulation_data['wrist'] = sim_image
     
@@ -264,9 +268,9 @@ def main(cfg: TrainPipelineConfig):
     input["action.std"] = action_std
     actions = lola.infer(input).tolist()
     
-    actions = [row[:7] for row in actions[0]]
+    actions = np.array([row[:14] for row in actions[0]])
     
-    print(actions)
+    print(actions.shape)
     response_dict = {
         "act": actions
     }

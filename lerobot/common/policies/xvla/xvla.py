@@ -109,7 +109,7 @@ class XVLA(PreTrainedPolicy):
             dim_time = self.config.dim_time,
             max_len_seq=self.config.max_len_seq,
             use_hetero_proj=self.config.use_hetero_proj,
-            num_domains = 60
+            num_domains = 30
         )
         
         # I/O preprocessors (implementations are project-specific)

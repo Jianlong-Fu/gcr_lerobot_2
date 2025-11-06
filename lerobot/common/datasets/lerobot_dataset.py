@@ -1906,7 +1906,9 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             action_std = action_std[:action_shape[1]]
             item['observation.state'] = (item['observation.state'] - state_mean) / (state_std + 1e-8)
             item['action'] = (item['action'] - action_mean) / (action_std + 1e-8)
-
+        for idx in GRIPPER_INDEX:
+            item['action'][:, idx] = torch.where(item['action'][:, idx] < 0.4, torch.zeros_like(item['action'][:, idx]), torch.ones_like(item['action'][:, idx]))
+            
         # 3. 缓存（可能已被归一化的）源张量
         src_state = item['observation.state']
         src_action = item['action']
@@ -1983,7 +1985,8 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
                     action_std = action_std[:action_shape[1]]
                     item['observation.state'] = (item['observation.state'] - state_mean) / (state_std + 1e-8)
                     item['action'] = (item['action'] - action_mean) / (action_std + 1e-8)
-                    
+                for idx in [GRIPPER_INDEX[0]]:
+                    item['action'][:, idx] = torch.where(item['action'][:, idx] < 0.4, torch.zeros_like(item['action'][:, idx]), torch.ones_like(item['action'][:, idx]))
                 # 直接切片赋值，移除 eef_pos, act_tran 等变量
                 src_state = item['observation.state']
                 src_action = item['action']
@@ -2024,7 +2027,8 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
                     action_std = action_std[:action_shape[1]]
                     item['observation.state'] = (item['observation.state'] - state_mean) / (state_std + 1e-8)
                     item['action'] = (item['action'] - action_mean) / (action_std + 1e-8)
-                    
+                for idx in [GRIPPER_INDEX[0]]:
+                    item['action'][:, idx] = torch.where(item['action'][:, idx] < 0.4, torch.zeros_like(item['action'][:, idx]), torch.ones_like(item['action'][:, idx]))
                 # 直接切片赋值
                 src_state = item['observation.state']
                 src_action = item['action']
@@ -2234,7 +2238,8 @@ class MultiSameDataset(torch.utils.data.Dataset):
             action_std = action_std[:action_shape[1]]
             item['observation.state'] = (item['observation.state'] - state_mean) / (state_std + 1e-8)
             item['action'] = (item['action'] - action_mean) / (action_std + 1e-8)
-
+        for idx in GRIPPER_INDEX:
+            item['action'][:, idx] = torch.where(item['action'][:, idx] < 0.4, torch.zeros_like(item['action'][:, idx]), torch.ones_like(item['action'][:, idx]))
         # 3. 缓存（可能已被归一化的）源张量
         src_state = item['observation.state']
         src_action = item['action']
@@ -2312,6 +2317,8 @@ class MultiSameDataset(torch.utils.data.Dataset):
                     item['observation.state'] = (item['observation.state'] - state_mean) / (state_std + 1e-8)
                     item['action'] = (item['action'] - action_mean) / (action_std + 1e-8)
                     
+                for idx in [GRIPPER_INDEX[0]]:
+                    item['action'][:, idx] = torch.where(item['action'][:, idx] < 0.4, torch.zeros_like(item['action'][:, idx]), torch.ones_like(item['action'][:, idx]))
                 # 直接切片赋值，移除 eef_pos, act_tran 等变量
                 src_state = item['observation.state']
                 src_action = item['action']
@@ -2352,7 +2359,8 @@ class MultiSameDataset(torch.utils.data.Dataset):
                     action_std = action_std[:action_shape[1]]
                     item['observation.state'] = (item['observation.state'] - state_mean) / (state_std + 1e-8)
                     item['action'] = (item['action'] - action_mean) / (action_std + 1e-8)
-                
+                for idx in [GRIPPER_INDEX[0]]:
+                    item['action'][:, idx] = torch.where(item['action'][:, idx] < 0.4, torch.zeros_like(item['action'][:, idx]), torch.ones_like(item['action'][:, idx]))
                 # 直接切片赋值
                 src_state = item['observation.state']
                 src_action = item['action']
@@ -2384,7 +2392,7 @@ class MultiSameDataset(torch.utils.data.Dataset):
         dataset_name = item["dataset_name"]
         
         # State & Action Unify
-        item = self.format_item_policywise(item, norm=True)
+        item = self.format_item_policywise(item, norm=False)
 
         data_config = OXE_DATASET_CONFIGS[dataset_name]
         image_obs_keys = data_config["image_obs_keys"]
@@ -2393,7 +2401,12 @@ class MultiSameDataset(torch.utils.data.Dataset):
         for new_key, old_key in image_obs_keys.items():
             if old_key != None:
                 item[f"observation.images.{new_key}"] = item[f"observation.images.{old_key}"]
-                length, channel, height, width = item[f"observation.images.{new_key}"].shape
+                if isinstance(item[f"observation.images.{new_key}"], torch.Tensor):
+                    length, channel, height, width = item[f"observation.images.{new_key}"].shape
+                else:
+                    length = len(item[f"observation.images.{new_key}"]) 
+                    item[f"observation.images.{new_key}"] = torch.from_numpy(np.array(item[f"observation.images.{new_key}"]).transpose(0, 3, 1, 2))
+                
                 if length > 1:
                     item[f"observation.images.{new_key}"] = item[f"observation.images.{new_key}"][0].unsqueeze(0)
                 # item[f"observation.images.{new_key}"] = item[f"observation.images.{new_key}"][0]

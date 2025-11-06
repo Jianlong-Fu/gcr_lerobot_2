@@ -379,22 +379,25 @@ class QwenPolicy(PreTrainedPolicy):
         noise = self.convert_to_dtype(noise)
         time = self.convert_to_dtype(time)
 
-        loss_dict = {}
+        
         losses = self.model.forward(input_ids, attention_mask, pixel_values, image_grid_thw, pixel_values_videos, video_grid_thw, second_per_grid_ts, state, actions, noise, time)
-        loss_dict["losses_after_forward"] = losses.clone()
+        # loss_dict = {}
+        # loss_dict["losses_after_forward"] = losses['total_loss'].clone()
 
-        if actions_is_pad is not None:
-            in_episode_bound = ~actions_is_pad
-            losses = losses * in_episode_bound.unsqueeze(-1)
-            loss_dict["losses_after_in_ep_bound"] = losses.clone()
+        # if actions_is_pad is not None:
+        #     in_episode_bound = ~actions_is_pad
+        #     losses = losses * in_episode_bound.unsqueeze(-1)
+        #     loss_dict["losses_after_in_ep_bound"] = losses['total_loss'].clone()
 
-        # Remove padding
-        losses = losses[:, :, : self.config.max_action_dim]
-        loss_dict["losses_after_rm_padding"] = losses.clone()
+        # # Remove padding
+        # # losses = losses[:, :, : self.config.max_action_dim]
+        # loss_dict["losses_after_rm_padding"] = losses['total_loss'].clone()
 
         # For backward pass
-        loss = losses.mean()
+        
         # For logging
+        loss_dict = losses
+        loss = losses['total_loss'].mean()
         loss_dict["l2_loss"] = loss.item()
 
         return loss, loss_dict
@@ -878,16 +881,30 @@ class QwenFlowMatching(nn.Module):
     
     def compute_loss(self, label, pred):
         gripper_dim = [6, 13]
-        action_wo_gripper = torch.concat([label[:, :, :gripper_dim[0]], label[:, :, gripper_dim[0]+1:gripper_dim[1]], label[:, :, gripper_dim[1]+1:]], 2)
-        pred_wo_gripper = torch.concat([pred[:, :, :gripper_dim[0]], pred[:, :, gripper_dim[0]+1:gripper_dim[1]], pred[:, :, gripper_dim[1]+1:]], 2)
-        action_gripper = torch.concat([label[:, :, gripper_dim[0]:gripper_dim[0]+1], label[:, :, gripper_dim[1]:gripper_dim[1]+1]], 2)
-        pred_gripper = torch.concat([pred[:, :, gripper_dim[0]:gripper_dim[0]+1], pred[:, :, gripper_dim[1]:gripper_dim[1]+1]], 2)
+        pos_dim = (0,1,2, 7,8,9)
+        rot_dim = (3,4,5, 10,11,12)
+        bce_loss = nn.BCEWithLogitsLoss()
+        mse_loss = nn.MSELoss()
+        # action_wo_gripper = torch.concat([label[:, :, :gripper_dim[0]], label[:, :, gripper_dim[0]+1:gripper_dim[1]], label[:, :, gripper_dim[1]+1:]], 2)
+        # pred_wo_gripper = torch.concat([pred[:, :, :gripper_dim[0]], pred[:, :, gripper_dim[0]+1:gripper_dim[1]], pred[:, :, gripper_dim[1]+1:]], 2)
         
-        diffu_loss = F.mse_loss(pred_wo_gripper, action_wo_gripper, reduction="none")
-        gripper_loss = nn.BCEWithLogitsLoss(reduction="none")(pred_gripper, action_gripper)
+        pos_loss = mse_loss(pred[:, :, pos_dim], label[:, :, pos_dim]) * self.config.pos_scale
+        rot_loss = mse_loss(pred[:, :, rot_dim], label[:, :, rot_dim]) * self.config.rot_scale
+        # diffu_loss = F.mse_loss(pred_wo_gripper, action_wo_gripper, reduction="none")
+        gripper_loss = [bce_loss(pred[:, :, g_dim], label[:, :, g_dim]) for g_dim in gripper_dim]
+        g_loss_mean = sum(gripper_loss) / len(gripper_loss)
+        g_loss = g_loss_mean * self.config.gripper_scale
         
-        losses = torch.cat([diffu_loss, gripper_loss], dim=2)
+        total = pos_loss + rot_loss + g_loss
         
+        losses = {
+            "pos_loss": pos_loss,
+            "rot_loss": rot_loss,
+            "gripper_loss": g_loss,
+            "total_loss": total
+        }
+        # losses = torch.cat([diffu_loss, gripper_loss], dim=2)
+        print(f"Loss dict value, pos_loss: {pos_loss}, rot_loss: {rot_loss}, gripper_loss: {g_loss_mean}, total_loss: {total}")
         return losses
 
     def forward(
