@@ -198,33 +198,33 @@ def train_step(model, batch, scaler, cfg, sync_flag):
 @parser.wrap()
 def train(cfg: TrainPipelineConfig):
     # 初始化分布式环境
-    # world_size = int(os.environ["WORLD_SIZE"])
-    # local_rank = int(os.environ["LOCAL_RANK"])
-    # world_rank = int(os.environ["RANK"])
-    # node_rank = int(os.environ["NODE_RANK"])
-    # master_ip = os.environ["MASTER_ADDR"]
-    # master_port = os.environ["MASTER_PORT"]
-    # master_uri = "tcp://%s:%s" % (master_ip, master_port)
-    # rank = world_rank
-    # dist.init_process_group(
-    #     backend="nccl",
-    #     init_method=master_uri,
-    #     world_size=world_size,
-    #     timeout=timedelta(minutes=60),
-    #     rank=world_rank,
-    # )
+    world_size = int(os.environ["WORLD_SIZE"])
+    local_rank = int(os.environ["LOCAL_RANK"])
+    world_rank = int(os.environ["RANK"])
+    node_rank = int(os.environ["NODE_RANK"])
+    master_ip = os.environ["MASTER_ADDR"]
+    master_port = os.environ["MASTER_PORT"]
+    master_uri = "tcp://%s:%s" % (master_ip, master_port)
+    rank = world_rank
+    dist.init_process_group(
+        backend="nccl",
+        init_method=master_uri,
+        world_size=world_size,
+        timeout=timedelta(minutes=60),
+        rank=world_rank,
+    )
     
-    dist.init_process_group(backend="nccl")
-    rank = dist.get_rank()
-    world_size = dist.get_world_size()
-    local_rank = rank
+    # dist.init_process_group(backend="nccl")
+    # rank = dist.get_rank()
+    # world_size = dist.get_world_size()
+    # local_rank = rank
     
     torch.cuda.set_device(local_rank)
     
     # 初始化配置
     cfg.validate()
     logger = init_logger(cfg, rank)
-    # logger.info(f"DIST INFO: world_size={world_size}, local_rank={local_rank}, world_rank={world_rank}, node_rank={node_rank}, master_uri={master_uri}")
+    logger.info(f"DIST INFO: world_size={world_size}, local_rank={local_rank}, world_rank={world_rank}, node_rank={node_rank}, master_uri={master_uri}")
     
     if rank == 0:
         logger.info(pformat(cfg.to_dict()))
@@ -449,9 +449,9 @@ def train(cfg: TrainPipelineConfig):
     # Metrics setup
     train_metrics = {
         "loss": AverageMeter("loss", ":.4f"),
-        "pos_loss": AverageMeter("loss", ":.4f"),
-        "rot_loss": AverageMeter("loss", ":.4f"),
-        "grip_loss": AverageMeter("loss", ":.4f"),
+        "pos_loss": AverageMeter("pos_loss", ":.4f"),
+        "rot_loss": AverageMeter("rot_loss", ":.4f"),
+        "grip_loss": AverageMeter("grip_loss", ":.4f"),
         "grad_norm": AverageMeter("grdn", ":.4f"),
         "lr": AverageMeter("lr", ":0.01e"),
         "update_s": AverageMeter("updt_s", ":.3f"),

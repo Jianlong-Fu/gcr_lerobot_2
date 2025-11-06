@@ -904,7 +904,6 @@ class QwenFlowMatching(nn.Module):
             "total_loss": total
         }
         # losses = torch.cat([diffu_loss, gripper_loss], dim=2)
-        print(f"Loss dict value, pos_loss: {pos_loss}, rot_loss: {rot_loss}, gripper_loss: {g_loss_mean}, total_loss: {total}")
         return losses
 
     def forward(
