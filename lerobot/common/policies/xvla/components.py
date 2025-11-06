@@ -30,6 +30,7 @@ DATA_DOMAIN_ID = {
     "cup_25_plus": 20,
     "cup_7_plus": 21,
     "cup_100_plus": 22,
+    "american_data": 23,
         
     # pretraining
     "robomind-franka": 11,
@@ -214,6 +215,7 @@ class Mlp(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Expect [B, T, C] for Linear variant; caller is responsible for shapes.
+        
         x = self.fc1(x)
         x = self.act(x)
         x = self.drop1(x)

@@ -818,19 +818,19 @@ class LeRobotDataset(torch.utils.data.Dataset):
             video_path = self.root / self.meta.get_video_file_path(ep_idx, vid_key)
             if vid_key == primary_obs_key:
                 # print(vid_key)
-                # frames = decode_video_frames_torchcodec(
-                #     video_path, query_ts, self.tolerance_s, return_all=True, return_type="image", worker_count=16
-                # )
-                frames = decode_video_frames_torchvision(
-                    video_path, query_ts, self.tolerance_s, self.video_backend, return_all=True, return_type="image"
+                frames = decode_video_frames_torchcodec(
+                    video_path, query_ts, self.tolerance_s, return_all=True, return_type="tensor", worker_count=16
                 )
+                # frames = decode_video_frames_torchvision(
+                #     video_path, query_ts, self.tolerance_s, self.video_backend, return_all=True, return_type="image"
+                # )
             else:
-                # frames = decode_video_frames_torchcodec(
-                #     video_path, query_ts, self.tolerance_s, return_all=False, return_type="image"
-                # )
-                frames = decode_video_frames_torchvision(
-                    video_path, query_ts, self.tolerance_s, self.video_backend, return_type="image"
+                frames = decode_video_frames_torchcodec(
+                    video_path, query_ts, self.tolerance_s, return_all=False, return_type="tensor"
                 )
+                # frames = decode_video_frames_torchvision(
+                #     video_path, query_ts, self.tolerance_s, self.video_backend, return_type="image"
+                # )
             # item[vid_key] = frames.squeeze(0)
             item[vid_key] = frames
 
@@ -2090,12 +2090,12 @@ class MultiSameDataset(torch.utils.data.Dataset):
             if meta_features == None:
                 meta_features = ds_meta.features
             delta_timestamps = resolve_delta_timestamps(cfg.policy, ds_meta)
-            if "american" in d_name:
-                # episode_list = list(range(1501)) # 100个视频
-                episode_list = list(range(1501, 1601)) # 100个视频
-                # episode_list = list(range(1701))
-            else:
-                episode_list = None
+            # if "american" in d_name:
+            #     # episode_list = list(range(1501)) # 100个视频
+            #     episode_list = list(range(1501, 1601)) # 100个视频
+            #     # episode_list = list(range(1701))
+            # else:
+            episode_list = None
             dataset = LeRobotDataset(
                 repo_id, 
                 root=data_root,

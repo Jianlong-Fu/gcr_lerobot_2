@@ -98,6 +98,10 @@ if __name__ == "__main__":
     directory_B = "/scratch/amlt_code/gcr_lerobot_2/robot_dataset/lerobot-format/aloha-busybox_lerobot_v2_1_combined_new/"         # 本地目标目录
     
     # 调整线程数（根据实际环境优化）
-    MAX_WORKERS = 32  # 云环境建议 16-32，普通PC建议 8-16
+    MAX_WORKERS = 96  # 云环境建议 16-32，普通PC建议 8-16
     
+    recursive_copy_with_progress(directory_A, directory_B, max_workers=MAX_WORKERS)
+    
+    directory_A = "/mnt/wangxiaofa/robot_dataset/lerobot-format/cup_hz_4_plus_1103/"
+    directory_B = "/scratch/amlt_code/gcr_lerobot_2/robot_dataset/lerobot-format/cup_hz_4_plus_1103/"
     recursive_copy_with_progress(directory_A, directory_B, max_workers=MAX_WORKERS)

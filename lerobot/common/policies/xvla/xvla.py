@@ -108,7 +108,8 @@ class XVLA(PreTrainedPolicy):
             len_soft_prompts=self.config.len_soft_prompts,
             dim_time = self.config.dim_time,
             max_len_seq=self.config.max_len_seq,
-            use_hetero_proj=self.config.use_hetero_proj
+            use_hetero_proj=self.config.use_hetero_proj,
+            num_domains = 60
         )
         
         # I/O preprocessors (implementations are project-specific)
