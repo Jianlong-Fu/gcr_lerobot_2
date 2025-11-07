@@ -30,7 +30,7 @@ DATA_DOMAIN_ID = {
     "cup_25_plus": 20,
     "cup_7_plus": 21,
     "cup_100_plus": 22,
-    "american_data": 23,
+    "aloha_bb": 23,
         
     # pretraining
     "robomind-franka": 11,
