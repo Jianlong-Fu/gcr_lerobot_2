@@ -9,7 +9,7 @@ NPROC_PER_NODE=2
 JOB_NAME=""
 JOB_TYPE="pretrain"
 DATA_MIX="oxe_magic_soup_plus"
-BATCH_SIZE=32
+BATCH_SIZE=2
 OPTIMIZER_LR=2.5e-5
 OPTIMIZER_DECAY_LR=2.5e-6
 OPTIMIZER_WEIGHT_DECAY=1e-2
@@ -134,7 +134,7 @@ if [[ -z "$JOB_NAME" ]]; then
 fi
 
 # 固定输出目录（根据需求修改）
-FIXED_OUTPUT_DIR="/mnt/wangxiaofa/xvla_finetune"
+FIXED_OUTPUT_DIR="/mnt/jianf/xvla_finetune"
 TOKENIZERS_PARALLELISM=FALSE
 # 设定环境变量
 export TOKENIZERS_PARALLELISM=$TOKENIZERS_PARALLELISM
