@@ -166,7 +166,7 @@ torchrun \
     --policy.scheduler_decay_lr=$OPTIMIZER_DECAY_LR \
     --policy.pretrained_path=$PRETRAINED_PATH \
     --wandb.enable=true \
-    --wandb.project="pi0first" \
+    --wandb.project="xvla_test" \
     --job_name="$JOB_NAME" \
     --job_type="$JOB_TYPE" \
     --log_dir="/mnt/jianf/logs" \
