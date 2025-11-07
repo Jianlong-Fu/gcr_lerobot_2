@@ -169,7 +169,7 @@ torchrun \
     --wandb.project="pi0first" \
     --job_name="$JOB_NAME" \
     --job_type="$JOB_TYPE" \
-    --log_dir="/mnt/wangxiaofa/logs" \
+    --log_dir="/mnt/jianf/logs" \
     --resume=true \
     --uni_res=true \
     --uni_obs_tensor=true
